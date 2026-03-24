@@ -3,116 +3,1017 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Octopus | Wander. Lose track of time.</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Octopus Reading Engine - ARU Prototype</title>
     <style>
         :root {
-            /* Extracted from the logo's warm aesthetic */
-            --bg-color: #fdfaf6;
-            --text-primary: #9b3d12;
-            --text-secondary: #e06c2b;
+            --bg-color: #fcfbf9;
+            --text-color: #1a1a1a;
+            --highlight-color: rgba(0, 0, 0, 0.08);
+            --blue-dark: #003366;
+            --blue-light: #CCE5FF;
+            --yellow-dark: #665C00;
+            --yellow-light: #FFF9CC;
+            --green-dark: #004D00;
+            --green-light: #E6FFFA;
+            --font-serif: 'Georgia', serif;
+            --font-sans: 'Helvetica Neue', Helvetica, Arial, sans-serif;
         }
 
-        body {
-            background-color: var(--bg-color);
-            color: var(--text-primary);
-            font-family: 'Georgia', serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
+        body,
+        html {
             margin: 0;
+            padding: 0;
+            height: 100%;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-serif);
+            line-height: 1.6;
+            font-size: 18px;
+            overflow-x: hidden;
+            scroll-behavior: smooth;
+        }
+
+        #aru-container {
+            padding: 60px 30px 100px 30px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .atu {
+            margin-bottom: 1.5em;
+            text-indent: 1.5em;
+            transition: filter 0.3s ease;
+        }
+
+        .sentence {
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+
+        .sentence.highlight {
+            background-color: var(--highlight-color);
+        }
+
+        .nav-btn {
+            position: fixed;
+            background: none;
+            border: none;
+            color: #ccc;
+            font-size: 24px;
+            cursor: pointer;
+            z-index: 50;
+            transition: color 0.2s ease, transform 0.2s ease;
+            padding: 10px;
+            line-height: 1;
+        }
+
+        .nav-btn:hover {
+            color: #666;
+            transform: scale(1.1);
+        }
+
+        #btn-context {
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        #btn-context:hover {
+            transform: translateX(-50%) scale(1.1);
+        }
+
+        #btn-prev {
+            top: 15px;
+            right: 20px;
+            font-size: 20px;
+        }
+
+        #btn-next {
+            bottom: 15px;
+            right: 20px;
+            font-size: 20px;
+        }
+
+        #btn-session {
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        #btn-session:hover {
+            transform: translateX(-50%) scale(1.1);
+        }
+
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--bg-color);
+            z-index: 100;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
             overflow: hidden;
         }
 
-        .content-wrapper {
-            text-align: center;
+        .overlay.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        #context-ui {
+            padding: 40px 20px;
+            font-family: var(--font-sans);
+            overflow-y: auto;
             max-width: 600px;
-            padding: 2rem;
-            opacity: 0;
-            /* Handled by JS fade-in */
+            margin: 0 auto;
         }
 
-        .logo-container img {
-            width: 300px;
-            height: auto;
-            /* Creates a gentle breathing/floating motion */
-            animation: float 6s ease-in-out infinite;
-            filter: drop-shadow(0px 10px 15px rgba(224, 108, 43, 0.15));
+        .close-btn {
+            font-size: 12px;
+            text-decoration: underline;
+            cursor: pointer;
+            display: block;
+            margin-bottom: 30px;
+            color: #555;
         }
 
-        h1 {
-            font-size: 2.5rem;
-            letter-spacing: 0.05em;
-            margin-top: 2rem;
-            margin-bottom: 1rem;
-            font-weight: normal;
+        .context-section {
+            margin-bottom: 40px;
         }
 
-        .byline {
-            font-size: 1.4rem;
+        .context-section h2 {
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 5px;
+            color: #333;
+        }
+
+        .context-text {
+            font-family: var(--font-serif);
+            font-size: 16px;
+            color: #444;
+        }
+
+        .entity-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .entity-list li {
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+
+        .entity-name {
+            font-weight: bold;
+            color: #111;
+        }
+
+        .entity-tag {
+            font-size: 10px;
+            background: #eee;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-left: 5px;
+            text-transform: uppercase;
+        }
+
+        #sidecar-ui {
+            display: flex;
+            flex-direction: column;
+        }
+
+        #sidecar-header {
+            height: 120px;
+            padding: 20px;
+            overflow: hidden;
+            filter: blur(4px);
+            opacity: 0.6;
+            font-size: 16px;
+            border-bottom: 1px solid #ddd;
+            cursor: pointer;
+        }
+
+        #reflection-hub {
+            padding: 20px;
+            border-bottom: 1px solid #ddd;
+            font-family: var(--font-sans);
+            flex-shrink: 0;
+        }
+
+        .reflection-title {
+            font-size: 10px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            color: #666;
+            margin-bottom: 10px;
+        }
+
+        .reflection-item {
+            font-size: 14px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .reflection-add {
+            font-size: 14px;
+            color: #555;
+            cursor: pointer;
             font-style: italic;
-            color: var(--text-secondary);
-            line-height: 1.8;
-            margin-top: 1.5rem;
         }
 
-        @keyframes float {
-            0% {
-                transform: translateY(0px);
-            }
+        #bento-grid {
+            display: flex;
+            flex-grow: 1;
+            font-family: var(--font-sans);
+            transition: all 0.3s ease;
+        }
 
-            50% {
-                transform: translateY(-12px);
-            }
+        .bento-col {
+            display: flex;
+            flex-direction: column;
+            cursor: pointer;
+            border-right: 1px solid #eee;
+            overflow-y: auto;
+            transition: all 0.3s ease;
+        }
 
-            100% {
-                transform: translateY(0px);
-            }
+        .bento-col:last-child {
+            border-right: none;
+        }
+
+        .bento-col.entities {
+            width: 30%;
+            background-color: var(--blue-light);
+        }
+
+        .bento-col.words {
+            width: 26%;
+            background-color: var(--yellow-light);
+        }
+
+        .bento-col.idioms {
+            width: 44%;
+            background-color: var(--green-light);
+        }
+
+        .bento-header {
+            font-size: 10px;
+            font-weight: bold;
+            text-align: center;
+            padding: 10px 0;
+            letter-spacing: 1px;
+        }
+
+        .bento-item {
+            padding: 10px;
+            font-size: 14px;
+            text-align: center;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        }
+
+        #bento-grid.accordion-mode .bento-col {
+            width: 10%;
+            overflow: hidden;
+            justify-content: flex-start;
+            align-items: center;
+        }
+
+        #bento-grid.accordion-mode .bento-col.expanded {
+            width: 80%;
+            align-items: stretch;
+            overflow-y: auto;
+        }
+
+        #bento-grid.accordion-mode .bento-col:not(.expanded) .bento-header {
+            writing-mode: vertical-rl;
+            text-orientation: upright;
+            margin-top: 20px;
+        }
+
+        #bento-grid.accordion-mode .bento-col:not(.expanded) .bento-item {
+            display: none;
+        }
+
+        .card {
+            margin: 10px;
+            padding: 15px;
+            border-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            display: none;
+        }
+
+        #bento-grid.accordion-mode .bento-col.expanded .card {
+            display: block;
+        }
+
+        .card-title {
+            font-weight: bold;
+            font-size: 14px;
+            margin-bottom: 5px;
+            color: #000;
+        }
+
+        .card-desc {
+            font-size: 12px;
+            color: #111;
+        }
+
+        #notes-ui {
+            display: flex;
+            flex-direction: column;
+        }
+
+        #notes-top {
+            height: 40vh;
+            padding: 20px;
+            overflow-y: auto;
+            border-bottom: 1px solid #ccc;
+            font-size: 16px;
+        }
+
+        #notes-middle {
+            height: 30vh;
+            background: #2a2a2a;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #notes-bottom {
+            height: 30vh;
+            background: #ddd;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: var(--font-sans);
+            color: #666;
+        }
+
+        #notes-input {
+            width: 100%;
+            flex-grow: 1;
+            background: transparent;
+            border: none;
+            color: #fff;
+            padding: 20px;
+            font-size: 16px;
+            font-family: var(--font-serif);
+            resize: none;
+            outline: none;
+            box-sizing: border-box;
+        }
+
+        .notes-actions {
+            display: flex;
+            justify-content: flex-end;
+            padding: 10px;
+        }
+
+        .notes-actions button {
+            background: #fff;
+            border: none;
+            padding: 5px 15px;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+
+        #session-close {
+            padding: 40px 20px;
+            font-family: var(--font-sans);
+            overflow-y: auto;
+            max-width: 600px;
+            margin: 0 auto;
         }
     </style>
 </head>
 
 <body>
 
-    <div class="content-wrapper" id="entry-portal">
-        <div class="logo-container">
-            <img src="logo.png" alt="Octopus reading a book" />
+    <button id="btn-context" class="nav-btn" onclick="openContext()" title="Open Context">⇞</button>
+    <button id="btn-prev" class="nav-btn" onclick="scrollToPrevATU()" title="Previous Paragraph">↑</button>
+    <button id="btn-next" class="nav-btn" onclick="scrollToNextATU()" title="Next Paragraph">↓</button>
+    <button id="btn-session" class="nav-btn" onclick="openSessionClose()" title="End Session">⇟</button>
+
+    <div id="aru-container">
+        <p class="atu">Letter 2</p>
+        <p class="atu">To Mrs. Saville, England.</p>
+        <p class="atu">Archangel, 28th March, 17—.</p>
+        <p class="atu">How slowly the time passes here, encompassed as I am by frost and snow! Yet a second step is
+            taken towards my enterprise. I have hired a vessel and am occupied in collecting my sailors; those whom I
+            have already engaged appear to be men on whom I can depend and are certainly possessed of dauntless courage.
+        </p>
+        <p class="atu">But I have one want which I have never yet been able to satisfy, and the absence of the object of
+            which I now feel as a most severe evil, I have no friend, Margaret: when I am glowing with the enthusiasm of
+            success, there will be none to participate my joy; if I am assailed by disappointment, no one will endeavour
+            to sustain me in dejection. I shall commit my thoughts to paper, it is true; but that is a poor medium for
+            the communication of feeling. I desire the company of a man who could sympathise with me, whose eyes would
+            reply to mine. You may deem me romantic, my dear sister, but I bitterly feel the want of a friend. I have no
+            one near me, gentle yet courageous, possessed of a cultivated as well as of a capacious mind, whose tastes
+            are like my own, to approve or amend my plans. How would such a friend repair the faults of your poor
+            brother! I am too ardent in execution and too impatient of difficulties. But it is a still greater evil to
+            me that I am self-educated: for the first fourteen years of my life I ran wild on a common and read nothing
+            but our Uncle Thomas’ books of voyages. At that age I became acquainted with the celebrated poets of our own
+            country; but it was only when it had ceased to be in my power to derive its most important benefits from
+            such a conviction that I perceived the necessity of becoming acquainted with more languages than that of my
+            native country. Now I am twenty-eight and am in reality more illiterate than many schoolboys of fifteen. It
+            is true that I have thought more and that my daydreams are more extended and magnificent, but they want (as
+            the painters call it) keeping; and I greatly need a friend who would have sense enough not to despise me as
+            romantic, and affection enough for me to endeavour to regulate my mind.</p>
+        <p class="atu">Well, these are useless complaints; I shall certainly find no friend on the wide ocean, nor even
+            here in Archangel, among merchants and seamen. Yet some feelings, unallied to the dross of human nature,
+            beat even in these rugged bosoms. My lieutenant, for instance, is a man of wonderful courage and enterprise;
+            he is madly desirous of glory, or rather, to word my phrase more characteristically, of advancement in his
+            profession. He is an Englishman, and in the midst of national and professional prejudices, unsoftened by
+            cultivation, retains some of the noblest endowments of humanity. I first became acquainted with him on board
+            a whale vessel; finding that he was unemployed in this city, I easily engaged him to assist in my
+            enterprise.</p>
+        <p class="atu">The master is a person of an excellent disposition and is remarkable in the ship for his
+            gentleness and the mildness of his discipline. This circumstance, added to his well-known integrity and
+            dauntless courage, made me very desirous to engage him. A youth passed in solitude, my best years spent
+            under your gentle and feminine fosterage, has so refined the groundwork of my character that I cannot
+            overcome an intense distaste to the usual brutality exercised on board ship: I have never believed it to be
+            necessary, and when I heard of a mariner equally noted for his kindliness of heart and the respect and
+            obedience paid to him by his crew, I felt myself peculiarly fortunate in being able to secure his services.
+            I heard of him first in rather a romantic manner, from a lady who owes to him the happiness of her life.
+            This, briefly, is his story. Some years ago he loved a young Russian lady of moderate fortune, and having
+            amassed a considerable sum in prize-money, the father of the girl consented to the match. He saw his
+            mistress once before the destined ceremony; but she was bathed in tears, and throwing herself at his feet,
+            entreated him to spare her, confessing at the same time that she loved another, but that he was poor, and
+            that her father would never consent to the union. My generous friend reassured the suppliant, and on being
+            informed of the name of her lover, instantly abandoned his pursuit. He had already bought a farm with his
+            money, on which he had designed to pass the remainder of his life; but he bestowed the whole on his rival,
+            together with the remains of his prize-money to purchase stock, and then himself solicited the young woman’s
+            father to consent to her marriage with her lover. But the old man decidedly refused, thinking himself bound
+            in honour to my friend, who, when he found the father inexorable, quitted his country, nor returned until he
+            heard that his former mistress was married according to her inclinations. “What a noble fellow!” you will
+            exclaim. He is so; but then he is wholly uneducated: he is as silent as a Turk, and a kind of ignorant
+            carelessness attends him, which, while it renders his conduct the more astonishing, detracts from the
+            interest and sympathy which otherwise he would command.</p>
+        <p class="atu">Yet do not suppose, because I complain a little or because I can conceive a consolation for my
+            toils which I may never know, that I am wavering in my resolutions. Those are as fixed as fate, and my
+            voyage is only now delayed until the weather shall permit my embarkation. The winter has been dreadfully
+            severe, but the spring promises well, and it is considered as a remarkably early season, so that perhaps I
+            may sail sooner than I expected. I shall do nothing rashly: you know me sufficiently to confide in my
+            prudence and considerateness whenever the safety of others is committed to my care.</p>
+        <p class="atu">I cannot describe to you my sensations on the near prospect of my undertaking. It is impossible
+            to communicate to you a conception of the trembling sensation, half pleasurable and half fearful, with which
+            I am preparing to depart. I am going to unexplored regions, to “the land of mist and snow,” but I shall kill
+            no albatross; therefore do not be alarmed for my safety or if I should come back to you as worn and woeful
+            as the “Ancient Mariner.” You will smile at my allusion, but I will disclose a secret. I have often
+            attributed my attachment to, my passionate enthusiasm for, the dangerous mysteries of ocean to that
+            production of the most imaginative of modern poets. There is something at work in my soul which I do not
+            understand. I am practically industrious—painstaking, a workman to execute with perseverance and labour—but
+            besides this there is a love for the marvellous, a belief in the marvellous, intertwined in all my projects,
+            which hurries me out of the common pathways of men, even to the wild sea and unvisited regions I am about to
+            explore.</p>
+        <p class="atu">But to return to dearer considerations. Shall I meet you again, after having traversed immense
+            seas, and returned by the most southern cape of Africa or America? I dare not expect such success, yet I
+            cannot bear to look on the reverse of the picture. Continue for the present to write to me by every
+            opportunity: I may receive your letters on some occasions when I need them most to support my spirits. I
+            love you very tenderly. Remember me with affection, should you never hear from me again.</p>
+        <p class="atu">Your affectionate brother,<br>Robert Walton</p>
+    </div>
+
+    <div id="context-ui" class="overlay">
+        <span class="close-btn" onclick="closeOverlays()">[ Close & Return to Reading ]</span>
+        <div class="context-section">
+            <h2>Session Context (Relevant Now)</h2>
+            <p class="context-text">Walton has successfully reached Archangel and is executing his plan to hire a vessel
+                and crew for the polar expedition. He is battling feelings of severe isolation as he prepares for
+                departure.</p>
+
+            <h3>Entity Tracker</h3>
+            <ul class="entity-list">
+                <li><span class="entity-name">Robert Walton</span> <span class="entity-tag">History</span><br>Captain of
+                    the expedition. Previously wrote from St. Petersburgh outlining his grand ambitions.</li>
+                <li><span class="entity-name">Mrs. Saville / Margaret</span> <span
+                        class="entity-tag">History</span><br>Walton's sister in England, his sole confidante and
+                    correspondent.</li>
+                <li><span class="entity-name">Archangel</span> <span class="entity-tag">History</span><br>The Russian
+                    port city Walton planned to travel to from St. Petersburgh to hire his ship.</li>
+                <li><span class="entity-name">Uncle Thomas</span> <span class="entity-tag">History</span><br>Walton's
+                    uncle whose library of voyages fueled his early childhood passions.</li>
+                <li><span class="entity-name">The Lieutenant</span> <span class="entity-tag"
+                        style="background:#e6fffa; color:#004d00;">New</span><br>An ambitious, unrefined, but noble
+                    English officer Walton hired for the voyage.</li>
+                <li><span class="entity-name">The Master</span> <span class="entity-tag"
+                        style="background:#e6fffa; color:#004d00;">New</span><br>An uneducated but remarkably gentle and
+                    honorable ship master with a tragic romantic past.</li>
+            </ul>
         </div>
-        <h1>octopus</h1>
-        <p class="byline">Wander. Lose track of time.<br>Get gloriously lost.<br>That’s the point.</p>
+
+        <div class="context-section">
+            <h2>Global Context (The Story So Far)</h2>
+            <p class="context-text">Robert Walton, an ambitious explorer, has set out on a perilous journey to the North
+                Pole to discover a northern passage and uncover the secrets of magnetism. After years of rigorous
+                physical and mental preparation—following a failed attempt at becoming a poet—he arrived in St.
+                Petersburgh. Filled with unwavering optimism and driven by childhood dreams, he detailed his plans to
+                his sister, Mrs. Saville, before departing for Archangel to secure a ship and crew.</p>
+        </div>
+    </div>
+
+    <div id="session-close" class="overlay">
+        <span class="close-btn" onclick="closeOverlays()">[ Resume Session ]</span>
+        <h2>ARU Session Complete</h2>
+        <p>Your Reflections for this session:</p>
+        <div id="session-reflections-list"></div>
+        <div class="reflection-add" onclick="openNotesMode('Global ARU Synthesis')">[+ Add ARU Summary]</div>
+    </div>
+
+    <div id="sidecar-ui" class="overlay">
+        <div id="sidecar-header" onclick="closeSidecar()"></div>
+
+        <div id="reflection-hub">
+            <div class="reflection-title">REFLECTION</div>
+            <div id="reflection-list"></div>
+            <div class="reflection-add" onclick="openNotesMode()">[+ Add new reflection] ✏️</div>
+        </div>
+
+        <div id="bento-grid">
+            <div class="bento-col entities" onclick="toggleColumn(this)">
+                <div class="bento-header">ENTITIES</div>
+            </div>
+            <div class="bento-col words" onclick="toggleColumn(this)">
+                <div class="bento-header">WORDS</div>
+            </div>
+            <div class="bento-col idioms" onclick="toggleColumn(this)">
+                <div class="bento-header">IDIOMS</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="notes-ui" class="overlay">
+        <div id="notes-top">
+            <div id="notes-context-text"></div>
+            <hr style="border:0; border-top:1px solid #eee; margin:20px 0;">
+            <div id="notes-history"></div>
+        </div>
+        <div id="notes-middle">
+            <textarea id="notes-input" placeholder="Synthesize this..."></textarea>
+            <div class="notes-actions">
+                <button onclick="saveNote()">Save</button>
+                <button onclick="closeNotesMode()"
+                    style="background:#555; color:#fff; margin-left:10px;">Cancel</button>
+            </div>
+        </div>
+        <div id="notes-bottom">
+            [ System Keyboard Area ]
+        </div>
     </div>
 
     <script>
-        // #region UI Effects
-
-        /**
-         * Orchestrates the initial fade-in effect of the landing page content.
-         * ACHIEVES: Smoothly reveals the page elements to enhance the whimsical feel.
-         * STEPS: 
-         * 1. Retrieve the main wrapper element.
-         * 2. Apply a CSS transition instruction.
-         * 3. Utilize a timeout to flip the opacity state after initial paint.
+        /*
+         * Octopus Reading Engine Prototype script.
+         * Handles DOM initialization, sentence parsing, arrow navigation,
+         * dynamic Sidecar data population based on ATU keys, and Notes aggregation.
+         * Order of steps:
+         * 1. Define embedded bento data dictionary.
+         * 2. Initialize the application and attach event listeners.
+         * 3. Handle scroll navigation logic.
+         * 4. Process user gestures (taps and long presses).
+         * 5. Handle UI transitions and dynamic data injection.
          */
-        function revealPortal() {
-            // Locate the wrapper that holds the logo and text
-            const portalElement = document.getElementById('entry-portal');
 
-            // Define the duration and easing of the fade
-            portalElement.style.transition = 'opacity 2.5s ease-in-out';
+        // #region Data Definitions
+        /*
+         * Data store for all ATU entities, words, and idioms.
+         * Keys are the first 30 characters of the target paragraph.
+         */
+        const bentoDb = {
+            "To Mrs. Saville, England.": {
+                entities: [
+                    { name: "Mrs. Saville", type: "History", color: "rgba(0,0,0,1)", bg: "#CCE5FF", desc: "Walton's sister, the recipient of these letters." },
+                    { name: "England", type: "Universal", color: "rgba(0,0,0,0.8)", bg: "#E6F2FF", desc: "Country of origin for Walton and his sister." }
+                ], words: [], idioms: []
+            },
+            "Archangel, 28th March, 17—.": {
+                entities: [
+                    { name: "Archangel", type: "History", color: "rgba(0,0,0,1)", bg: "#CCE5FF", desc: "Russian port city acting as the launch pad for the expedition." }
+                ], words: [], idioms: []
+            },
+            "How slowly the time passes her": {
+                entities: [],
+                words: [
+                    { word: "Encompassed", type: "Universal", color: "rgba(0,0,0,1)", bg: "#665C00", desc: "Surrounded and have or hold within." },
+                    { word: "Dauntless", type: "Universal", color: "rgba(0,0,0,0.8)", bg: "#998B00", desc: "Showing fearlessness and determination." }
+                ],
+                idioms: [
+                    { phrase: "Encompassed... by frost and snow", type: "Context", color: "rgba(0,0,0,1)", bg: "#004D00", desc: "Surrounded completely by the harsh winter environment." }
+                ]
+            },
+            "But I have one want which I ha": {
+                entities: [
+                    { name: "Margaret", type: "History", color: "rgba(0,0,0,1)", bg: "#CCE5FF", desc: "Walton's sister, also addressed as Mrs. Saville." },
+                    { name: "Uncle Thomas", type: "Lore", color: "rgba(0,0,0,0.8)", bg: "#E6F2FF", desc: "Owner of the books of voyages that educated young Walton." }
+                ],
+                words: [
+                    { word: "Capacious", type: "Universal", color: "rgba(0,0,0,1)", bg: "#665C00", desc: "Having a lot of space inside; roomy." },
+                    { word: "Ardent", type: "Universal", color: "rgba(0,0,0,0.8)", bg: "#998B00", desc: "Enthusiastic or passionate." }
+                ],
+                idioms: [
+                    { phrase: "Ran wild on a common", type: "Context", color: "rgba(0,0,0,1)", bg: "#004D00", desc: "Growing up without formal constraints or disciplined education." },
+                    { phrase: "Want... keeping", type: "Lore", color: "rgba(0,0,0,0.8)", bg: "#338033", desc: "A painter's term meaning a lack of proper balance or harmony." }
+                ]
+            },
+            "Well, these are useless compla": {
+                entities: [
+                    { name: "The Lieutenant", type: "New", color: "rgba(0,0,0,1)", bg: "#CCE5FF", desc: "An ambitious, unrefined, but noble English officer." }
+                ],
+                words: [
+                    { word: "Dross", type: "Universal", color: "rgba(0,0,0,1)", bg: "#665C00", desc: "Something regarded as worthless; rubbish." },
+                    { word: "Unallied", type: "Universal", color: "rgba(0,0,0,0.8)", bg: "#998B00", desc: "Not allied or connected." }
+                ],
+                idioms: [
+                    { phrase: "Dross of human nature", type: "Context", color: "rgba(0,0,0,1)", bg: "#004D00", desc: "The base, worthless aspects of humanity." }
+                ]
+            },
+            "The master is a person of an e": {
+                entities: [
+                    { name: "The Master", type: "New", color: "rgba(0,0,0,1)", bg: "#CCE5FF", desc: "A remarkably gentle ship captain with a tragic romantic past." }
+                ],
+                words: [
+                    { word: "Inexorable", type: "Universal", color: "rgba(0,0,0,1)", bg: "#665C00", desc: "Impossible to stop or prevent." },
+                    { word: "Suppliant", type: "Universal", color: "rgba(0,0,0,0.8)", bg: "#998B00", desc: "A person making a humble plea." }
+                ],
+                idioms: [
+                    { phrase: "Bathed in tears", type: "Context", color: "rgba(0,0,0,1)", bg: "#004D00", desc: "Crying profusely." },
+                    { phrase: "Silent as a Turk", type: "Context", color: "rgba(0,0,0,0.8)", bg: "#338033", desc: "An archaic idiom denoting extreme reticence or quietness." }
+                ]
+            },
+            "Yet do not suppose, because I ": {
+                entities: [],
+                words: [
+                    { word: "Embarkation", type: "Universal", color: "rgba(0,0,0,1)", bg: "#665C00", desc: "The process of loading a passenger ship." }
+                ],
+                idioms: [
+                    { phrase: "Fixed as fate", type: "Context", color: "rgba(0,0,0,1)", bg: "#004D00", desc: "Unchangeable and inevitable." }
+                ]
+            },
+            "I cannot describe to you my se": {
+                entities: [
+                    { name: "Ancient Mariner", type: "Lore", color: "rgba(0,0,0,1)", bg: "#CCE5FF", desc: "Reference to Coleridge's poem highlighting the danger of the sea." }
+                ],
+                words: [
+                    { word: "Allusion", type: "Universal", color: "rgba(0,0,0,1)", bg: "#665C00", desc: "An expression designed to call something to mind without mentioning it." },
+                    { word: "Perseverance", type: "Universal", color: "rgba(0,0,0,0.8)", bg: "#998B00", desc: "Persistence in doing something despite difficulty." }
+                ],
+                idioms: [
+                    { phrase: "Kill no albatross", type: "Lore", color: "rgba(0,0,0,1)", bg: "#004D00", desc: "A promise not to bring a curse upon the voyage." }
+                ]
+            },
+            "But to return to dearer consid": {
+                entities: [
+                    { name: "Africa", type: "History", color: "rgba(0,0,0,1)", bg: "#CCE5FF", desc: "The continent." },
+                    { name: "America", type: "History", color: "rgba(0,0,0,0.8)", bg: "#E6F2FF", desc: "The continent." }
+                ],
+                words: [
+                    { word: "Traversed", type: "Universal", color: "rgba(0,0,0,1)", bg: "#665C00", desc: "Travel across or through." }
+                ],
+                idioms: [
+                    { phrase: "Reverse of the picture", type: "Context", color: "rgba(0,0,0,1)", bg: "#004D00", desc: "The opposite or negative possible outcome." }
+                ]
+            }
+        };
 
-            // Push the opacity change to the end of the event loop to ensure transition triggers
-            setTimeout(() => {
-                portalElement.style.opacity = '1';
-            }, 100);
-        }
-
+        let notesDb = {};
         // #endregion
 
-        // Trigger the effect once the DOM is fully parsed
-        window.onload = revealPortal;
-    </script>
+        // #region Initialization
+        /*
+         * Initializes the application by wrapping sentences and attaching event listeners.
+         */
+        function initApp() {
+            wrapSentences();
+            attachGestureListeners();
+        }
 
+        /*
+         * Wraps individual sentences in span tags to allow tap-to-highlight functionality.
+         */
+        function wrapSentences() {
+            const atus = document.querySelectorAll('.atu');
+            atus.forEach(atu => {
+                const text = atu.innerHTML;
+                const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+                atu.innerHTML = sentences.map(s => `<span class="sentence">${s.trim()}</span> `).join('');
+            });
+        }
+        // #endregion
+
+        // #region Scroll Navigation
+        /*
+         * Scrolls the view to the previous ATU closest to the top of the viewport.
+         */
+        function scrollToPrevATU() {
+            const atus = Array.from(document.querySelectorAll('.atu'));
+            let target = atus[0];
+            for (let i = 0; i < atus.length; i++) {
+                if (atus[i].getBoundingClientRect().top > 50) {
+                    target = atus[Math.max(0, i - 1)];
+                    break;
+                }
+            }
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        /*
+         * Scrolls the view to the next ATU closest to the top of the viewport.
+         */
+        function scrollToNextATU() {
+            const atus = Array.from(document.querySelectorAll('.atu'));
+            let target = atus[atus.length - 1];
+            for (let i = 0; i < atus.length; i++) {
+                if (atus[i].getBoundingClientRect().top > 50) {
+                    target = atus[Math.min(atus.length - 1, i + 1)];
+                    break;
+                }
+            }
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        // #endregion
+
+        // #region Event Handlers
+        let longPressTimer;
+        let isDragging = false;
+        let startY = 0;
+        let currentAtu = null;
+
+        /*
+         * Attaches pointer listeners for sentence tapping and ATU long-pressing.
+         * Prevents tap logic from firing if the user is dragging/scrolling.
+         */
+        function attachGestureListeners() {
+            const container = document.getElementById('aru-container');
+
+            container.addEventListener('pointerdown', (e) => {
+                const atu = e.target.closest('.atu');
+                isDragging = false;
+                startY = e.clientY;
+
+                if (atu) {
+                    currentAtu = atu;
+                    longPressTimer = setTimeout(() => {
+                        if (!isDragging) openSidecar(atu);
+                    }, 600);
+                }
+            });
+
+            container.addEventListener('pointermove', (e) => {
+                if (Math.abs(e.clientY - startY) > 10) {
+                    isDragging = true;
+                    clearTimeout(longPressTimer);
+                }
+            });
+
+            container.addEventListener('pointerup', (e) => {
+                clearTimeout(longPressTimer);
+                if (!isDragging) {
+                    const sentence = e.target.closest('.sentence');
+                    if (sentence) {
+                        sentence.classList.toggle('highlight');
+                    }
+                }
+            });
+
+            container.addEventListener('pointercancel', () => {
+                clearTimeout(longPressTimer);
+                isDragging = false;
+            });
+        }
+
+        /*
+         * Closes all active overlays, returning to the text canvas.
+         */
+        function closeOverlays() {
+            document.querySelectorAll('.overlay').forEach(el => el.classList.remove('active'));
+        }
+
+        /*
+         * Opens the double-pull context UI.
+         */
+        function openContext() {
+            document.getElementById('context-ui').classList.add('active');
+        }
+
+        /*
+         * Opens the bottom-pull session close UI.
+         */
+        function openSessionClose() {
+            populateSessionClose();
+            document.getElementById('session-close').classList.add('active');
+        }
+        // #endregion
+
+        // #region Sidecar UI
+        /*
+         * Opens the Sidecar UI, injects the blurred header, and triggers Bento population.
+         */
+        function openSidecar(atu) {
+            const sidecar = document.getElementById('sidecar-ui');
+            const header = document.getElementById('sidecar-header');
+            header.innerText = atu.innerText;
+
+            populateBentoGrid(atu.innerText);
+            renderReflectionHub();
+            collapseToGrid();
+            sidecar.classList.add('active');
+        }
+
+        /*
+         * Closes the Sidecar UI.
+         */
+        function closeSidecar() {
+            document.getElementById('sidecar-ui').classList.remove('active');
+        }
+
+        /*
+         * Toggles the expanded accordion state for a specific Bento column.
+         */
+        function toggleColumn(colElement) {
+            const grid = document.getElementById('bento-grid');
+            const allCols = document.querySelectorAll('.bento-col');
+
+            if (colElement.classList.contains('expanded')) {
+                collapseToGrid();
+            } else {
+                grid.classList.add('accordion-mode');
+                allCols.forEach(c => c.classList.remove('expanded'));
+                colElement.classList.add('expanded');
+                document.getElementById('reflection-hub').style.display = 'none';
+                document.getElementById('sidecar-header').style.display = 'none';
+            }
+        }
+
+        /*
+         * Restores the Bento Grid to its default 3-column view.
+         */
+        function collapseToGrid() {
+            const grid = document.getElementById('bento-grid');
+            const allCols = document.querySelectorAll('.bento-col');
+            grid.classList.remove('accordion-mode');
+            allCols.forEach(c => c.classList.remove('expanded'));
+            document.getElementById('reflection-hub').style.display = 'block';
+            document.getElementById('sidecar-header').style.display = 'block';
+        }
+
+        /*
+         * Generates the HTML string for items inside a single Bento column.
+         */
+        function buildBentoItems(items) {
+            let html = '';
+            items.forEach(item => {
+                const label = item.name || item.word || item.phrase;
+                html += `<div class="bento-item" style="color: ${item.color}">${label}</div>`;
+                html += `<div class="card" style="background: ${item.bg}">
+                    <div class="card-title">${label}</div>
+                    <div class="card-desc"><strong>${item.type}:</strong> ${item.desc}</div>
+                 </div>`;
+            });
+            return html;
+        }
+
+        /*
+         * COMPLEX FUNCTION
+         * Extracts the current ATU key, fetches related data, and injects HTML into the Bento Grid.
+         * Steps:
+         * 1. Derives the lookup key from the first 30 characters of the ATU text.
+         * 2. Retrieves corresponding data from bentoDb (or uses an empty fallback).
+         * 3. Targets the column containers in the DOM.
+         * 4. Calls buildBentoItems to generate HTML and injects it alongside the headers.
+         */
+        function populateBentoGrid(atuText) {
+            const atuKey = atuText.substring(0, 30).trim();
+            const data = bentoDb[atuKey] || { entities: [], words: [], idioms: [] };
+
+            const colEntities = document.querySelector('.bento-col.entities');
+            const colWords = document.querySelector('.bento-col.words');
+            const colIdioms = document.querySelector('.bento-col.idioms');
+
+            colEntities.innerHTML = '<div class="bento-header">ENTITIES</div>' + buildBentoItems(data.entities);
+            colWords.innerHTML = '<div class="bento-header">WORDS</div>' + buildBentoItems(data.words);
+            colIdioms.innerHTML = '<div class="bento-header">IDIOMS</div>' + buildBentoItems(data.idioms);
+        }
+        // #endregion
+
+        // #region Notes UI
+        let editingNoteIndex = -1;
+
+        /*
+         * Renders the short list of notes specific to the active ATU.
+         */
+        function renderReflectionHub() {
+            const list = document.getElementById('reflection-list');
+            const atuKey = currentAtu ? currentAtu.innerText.substring(0, 30).trim() : 'global';
+            const notes = notesDb[atuKey] || [];
+
+            list.innerHTML = '';
+            notes.forEach((note, index) => {
+                const div = document.createElement('div');
+                div.className = 'reflection-item';
+                const snippet = note.length > 50 ? note.substring(0, 50) + '...' : note;
+                div.innerHTML = `<span>${snippet}</span> <div><span style="cursor:pointer; margin-right:5px;" onclick="openNotesMode(null, ${index})">[Edit]</span> <span style="cursor:pointer;" onclick="deleteNote(${index})">[Del]</span></div>`;
+                list.appendChild(div);
+            });
+        }
+
+        /*
+         * Opens the 40/30/30 Context-Sync writing workstation.
+         */
+        function openNotesMode(contextOverride = null, editIndex = -1) {
+            const notesUi = document.getElementById('notes-ui');
+            const topContext = document.getElementById('notes-context-text');
+            const history = document.getElementById('notes-history');
+            const input = document.getElementById('notes-input');
+
+            editingNoteIndex = editIndex;
+
+            if (contextOverride) {
+                topContext.innerText = contextOverride;
+                history.innerHTML = '';
+            } else if (currentAtu) {
+                topContext.innerText = currentAtu.innerText;
+                const atuKey = currentAtu.innerText.substring(0, 30).trim();
+                const notes = notesDb[atuKey] || [];
+                history.innerHTML = '<strong>Past Reflections:</strong><br>' + notes.map((n, i) => i !== editIndex ? `• ${n}` : '').filter(Boolean).join('<br>');
+                input.value = editIndex > -1 ? notes[editIndex] : '';
+            }
+            notesUi.classList.add('active');
+        }
+
+        /*
+         * Closes the Notes UI and clears the input.
+         */
+        function closeNotesMode() {
+            document.getElementById('notes-ui').classList.remove('active');
+            document.getElementById('notes-input').value = '';
+        }
+
+        /*
+         * Saves the contents of the Notes input to the active ATU's array.
+         */
+        function saveNote() {
+            const input = document.getElementById('notes-input');
+            const val = input.value.trim();
+            if (!val) { closeNotesMode(); return; }
+
+            const atuKey = currentAtu ? currentAtu.innerText.substring(0, 30).trim() : 'global';
+            if (!notesDb[atuKey]) notesDb[atuKey] = [];
+
+            if (editingNoteIndex > -1) {
+                notesDb[atuKey][editingNoteIndex] = val;
+            } else {
+                notesDb[atuKey].push(val);
+            }
+
+            closeNotesMode();
+            renderReflectionHub();
+            populateSessionClose();
+        }
+
+        /*
+         * Deletes a note by index for the active ATU.
+         */
+        function deleteNote(index) {
+            const atuKey = currentAtu ? currentAtu.innerText.substring(0, 30).trim() : 'global';
+            if (notesDb[atuKey]) {
+                notesDb[atuKey].splice(index, 1);
+                renderReflectionHub();
+            }
+        }
+
+        /*
+         * Aggregates all session notes into the closing summary overlay.
+         */
+        function populateSessionClose() {
+            const list = document.getElementById('session-reflections-list');
+            list.innerHTML = '';
+
+            let hasNotes = false;
+            for (const [key, notes] of Object.entries(notesDb)) {
+                if (notes.length > 0) {
+                    hasNotes = true;
+                    const block = document.createElement('div');
+                    block.style.marginBottom = '20px';
+                    block.innerHTML = `<strong>Context: ${key}...</strong><br>` + notes.map(n => `• ${n}`).join('<br>');
+                    list.appendChild(block);
+                }
+            }
+            if (!hasNotes) {
+                list.innerHTML = '<em>No reflections recorded during this session.</em><br><br>';
+            }
+        }
+        // #endregion
+
+        window.onload = initApp;
+    </script>
 </body>
 
 </html>
