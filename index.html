@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Octopus | Wander. Lose track of time.</title>
+    <style>
+        :root {
+            /* Extracted from the logo's warm aesthetic */
+            --bg-color: #fdfaf6;
+            --text-primary: #9b3d12;
+            --text-secondary: #e06c2b;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            font-family: 'Georgia', serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .content-wrapper {
+            text-align: center;
+            max-width: 600px;
+            padding: 2rem;
+            opacity: 0;
+            /* Handled by JS fade-in */
+        }
+
+        .logo-container img {
+            width: 300px;
+            height: auto;
+            /* Creates a gentle breathing/floating motion */
+            animation: float 6s ease-in-out infinite;
+            filter: drop-shadow(0px 10px 15px rgba(224, 108, 43, 0.15));
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            letter-spacing: 0.05em;
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+            font-weight: normal;
+        }
+
+        .byline {
+            font-size: 1.4rem;
+            font-style: italic;
+            color: var(--text-secondary);
+            line-height: 1.8;
+            margin-top: 1.5rem;
+        }
+
+        @keyframes float {
+            0% {
+                transform: translateY(0px);
+            }
+
+            50% {
+                transform: translateY(-12px);
+            }
+
+            100% {
+                transform: translateY(0px);
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="content-wrapper" id="entry-portal">
+        <div class="logo-container">
+            <img src="logo.png" alt="Octopus reading a book" />
+        </div>
+        <h1>octopus</h1>
+        <p class="byline">Wander. Lose track of time.<br>Get gloriously lost.<br>That’s the point.</p>
+    </div>
+
+    <script>
+        // #region UI Effects
+
+        /**
+         * Orchestrates the initial fade-in effect of the landing page content.
+         * ACHIEVES: Smoothly reveals the page elements to enhance the whimsical feel.
+         * STEPS: 
+         * 1. Retrieve the main wrapper element.
+         * 2. Apply a CSS transition instruction.
+         * 3. Utilize a timeout to flip the opacity state after initial paint.
+         */
+        function revealPortal() {
+            // Locate the wrapper that holds the logo and text
+            const portalElement = document.getElementById('entry-portal');
+
+            // Define the duration and easing of the fade
+            portalElement.style.transition = 'opacity 2.5s ease-in-out';
+
+            // Push the opacity change to the end of the event loop to ensure transition triggers
+            setTimeout(() => {
+                portalElement.style.opacity = '1';
+            }, 100);
+        }
+
+        // #endregion
+
+        // Trigger the effect once the DOM is fully parsed
+        window.onload = revealPortal;
+    </script>
+
+</body>
+
+</html>
