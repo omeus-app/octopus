@@ -4,106 +4,180 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Octopus Reading Engine - ARU Prototype</title>
+    <title>Octopus Reading Engine — ARU</title>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Inter:wght@300;400;500;600&display=swap');
+
         :root {
-            --bg-color: #fcfbf9;
-            --text-color: #1a1a1a;
-            --highlight-color: rgba(0, 0, 0, 0.08);
-            --blue-dark: #003366;
-            --blue-light: #CCE5FF;
-            --yellow-dark: #665C00;
-            --yellow-light: #FFF9CC;
-            --green-dark: #004D00;
-            --green-light: #E6FFFA;
-            --font-serif: 'Georgia', serif;
-            --font-sans: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            --bg: #FAF8F5;
+            --ink: #1C1917;
+            --ink-soft: #57534E;
+            --ink-ghost: #A8A29E;
+            --highlight: rgba(180, 160, 120, 0.15);
+            --highlight-active: rgba(180, 160, 120, 0.28);
+            --rule: rgba(0, 0, 0, 0.06);
+
+            --blue-deep: #1E3A5F;
+            --blue-mid: #4A7FB5;
+            --blue-pale: #D6E8F7;
+            --blue-ghost: #EBF3FA;
+
+            --yellow-deep: #5C4E00;
+            --yellow-mid: #A89200;
+            --yellow-pale: #F5EFD0;
+            --yellow-ghost: #FAF7E8;
+
+            --green-deep: #1B4332;
+            --green-mid: #52796F;
+            --green-pale: #D8F3DC;
+            --green-ghost: #EDF6EE;
+
+            --serif: 'Cormorant Garamond', 'Georgia', serif;
+            --sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+
+            --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+            --ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1);
+            --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
         }
 
-        body,
-        html {
+        *, *::before, *::after {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body, html {
             margin: 0;
             padding: 0;
             height: 100%;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            font-family: var(--font-serif);
-            line-height: 1.6;
-            font-size: 18px;
+            background: var(--bg);
+            color: var(--ink);
+            font-family: var(--serif);
+            font-size: 20px;
+            line-height: 1.75;
             overflow-x: hidden;
-            scroll-behavior: smooth;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* ═══════════════════════════════════════
+           ZERO-UI READING CANVAS
+           ═══════════════════════════════════════ */
+
+        #reading-surface {
+            position: relative;
+            min-height: 100vh;
+            touch-action: pan-y;
+        }
+
+        #pull-indicator-top,
+        #pull-indicator-bottom {
+            position: fixed;
+            left: 0;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            z-index: 40;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            font-family: var(--sans);
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--ink-ghost);
+        }
+
+        #pull-indicator-top {
+            top: 0;
+            height: 60px;
+            transform: translateY(-100%);
+        }
+
+        #pull-indicator-bottom {
+            bottom: 0;
+            height: 60px;
+            transform: translateY(100%);
+        }
+
+        #pull-indicator-top.visible,
+        #pull-indicator-bottom.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        #pull-indicator-top.ready,
+        #pull-indicator-bottom.ready {
+            color: var(--ink-soft);
         }
 
         #aru-container {
-            padding: 60px 30px 100px 30px;
-            max-width: 600px;
+            padding: 15vh 32px 20vh 32px;
+            max-width: 620px;
             margin: 0 auto;
+            position: relative;
         }
 
+        /* ATU Paragraphs */
         .atu {
-            margin-bottom: 1.5em;
-            text-indent: 1.5em;
-            transition: filter 0.3s ease;
+            margin-bottom: 0;
+            text-indent: 0;
+            padding: 0.4em 0;
+            position: relative;
+            transition: filter 0.4s var(--ease-out-expo), opacity 0.4s var(--ease-out-expo);
         }
 
+        .atu + .atu {
+            text-indent: 1.8em;
+        }
+
+        .atu.is-header {
+            text-indent: 0;
+            font-weight: 500;
+            font-size: 0.95em;
+            color: var(--ink-soft);
+        }
+
+        .atu.is-signature {
+            text-indent: 0;
+            margin-top: 1.5em;
+        }
+
+        /* Sentence-level highlighting */
         .sentence {
             cursor: pointer;
-            transition: background-color 0.2s ease;
+            border-radius: 2px;
+            transition: background-color 0.25s ease, box-shadow 0.25s ease;
+            padding: 1px 0;
         }
 
-        .sentence.highlight {
-            background-color: var(--highlight-color);
+        .sentence:active {
+            background-color: var(--highlight);
         }
 
-        .nav-btn {
-            position: fixed;
-            background: none;
-            border: none;
-            color: #ccc;
-            font-size: 24px;
-            cursor: pointer;
-            z-index: 50;
-            transition: color 0.2s ease, transform 0.2s ease;
-            padding: 10px;
-            line-height: 1;
+        .sentence.highlighted {
+            background-color: var(--highlight);
+            box-shadow: 0 1px 0 rgba(180, 160, 120, 0.3);
         }
 
-        .nav-btn:hover {
-            color: #666;
-            transform: scale(1.1);
+        .sentence.highlighted:active {
+            background-color: var(--highlight-active);
         }
 
-        #btn-context {
-            top: 10px;
-            left: 50%;
-            transform: translateX(-50%);
+        /* Long-press visual feedback */
+        .atu.pressing {
+            background: radial-gradient(ellipse at var(--press-x, 50%) var(--press-y, 50%), rgba(0,0,0,0.03) 0%, transparent 70%);
         }
 
-        #btn-context:hover {
-            transform: translateX(-50%) scale(1.1);
+        .atu.sidecar-source {
+            filter: blur(3px);
+            opacity: 0.4;
         }
 
-        #btn-prev {
-            top: 15px;
-            right: 20px;
-            font-size: 20px;
-        }
-
-        #btn-next {
-            bottom: 15px;
-            right: 20px;
-            font-size: 20px;
-        }
-
-        #btn-session {
-            bottom: 10px;
-            left: 50%;
-            transform: translateX(-50%);
-        }
-
-        #btn-session:hover {
-            transform: translateX(-50%) scale(1.1);
-        }
+        /* ═══════════════════════════════════════
+           OVERLAYS — SHARED
+           ═══════════════════════════════════════ */
 
         .overlay {
             position: fixed;
@@ -111,908 +185,1712 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: var(--bg-color);
             z-index: 100;
-            opacity: 0;
             pointer-events: none;
-            transition: opacity 0.3s ease;
             overflow: hidden;
         }
 
         .overlay.active {
-            opacity: 1;
             pointer-events: all;
         }
 
-        #context-ui {
-            padding: 40px 20px;
-            font-family: var(--font-sans);
+        .overlay-backdrop {
+            position: absolute;
+            inset: 0;
+            background: var(--bg);
+            opacity: 0;
+            transition: opacity 0.4s var(--ease-out-expo);
+        }
+
+        .overlay.active .overlay-backdrop {
+            opacity: 1;
+        }
+
+        .overlay-content {
+            position: absolute;
+            inset: 0;
+            transform: translateY(20px);
+            opacity: 0;
+            transition: transform 0.5s var(--ease-out-expo), opacity 0.4s var(--ease-out-expo);
+        }
+
+        .overlay.active .overlay-content {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        /* ═══════════════════════════════════════
+           CONTEXT UI (Top Pull)
+           ═══════════════════════════════════════ */
+
+        #context-ui .overlay-content {
+            padding: 48px 28px;
             overflow-y: auto;
-            max-width: 600px;
+            max-width: 620px;
             margin: 0 auto;
         }
 
-        .close-btn {
-            font-size: 12px;
-            text-decoration: underline;
+        .context-close {
+            font-family: var(--sans);
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            color: var(--ink-ghost);
             cursor: pointer;
-            display: block;
-            margin-bottom: 30px;
-            color: #555;
+            display: inline-block;
+            margin-bottom: 40px;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--rule);
+            transition: color 0.2s ease;
+        }
+
+        .context-close:hover {
+            color: var(--ink-soft);
         }
 
         .context-section {
-            margin-bottom: 40px;
+            margin-bottom: 48px;
         }
 
         .context-section h2 {
-            font-size: 14px;
+            font-family: var(--sans);
+            font-size: 10px;
+            font-weight: 600;
             text-transform: uppercase;
-            letter-spacing: 2px;
-            border-bottom: 1px solid #ddd;
-            padding-bottom: 5px;
-            color: #333;
+            letter-spacing: 3px;
+            color: var(--ink-ghost);
+            border-bottom: 1px solid var(--rule);
+            padding-bottom: 12px;
+            margin-bottom: 20px;
         }
 
-        .context-text {
-            font-family: var(--font-serif);
-            font-size: 16px;
-            color: #444;
+        .context-prose {
+            font-family: var(--serif);
+            font-size: 18px;
+            line-height: 1.8;
+            color: var(--ink-soft);
         }
 
         .entity-list {
             list-style: none;
             padding: 0;
+            margin: 20px 0 0 0;
         }
 
         .entity-list li {
-            margin-bottom: 15px;
-            font-size: 14px;
+            padding: 14px 0;
+            border-bottom: 1px solid var(--rule);
+            font-family: var(--sans);
+            font-size: 13px;
+            line-height: 1.6;
+            color: var(--ink-soft);
         }
 
         .entity-name {
-            font-weight: bold;
-            color: #111;
+            font-weight: 600;
+            color: var(--ink);
+            font-size: 14px;
         }
 
         .entity-tag {
-            font-size: 10px;
-            background: #eee;
-            padding: 2px 6px;
-            border-radius: 4px;
-            margin-left: 5px;
+            font-size: 9px;
+            font-weight: 600;
+            letter-spacing: 1px;
             text-transform: uppercase;
+            padding: 2px 8px;
+            border-radius: 3px;
+            margin-left: 8px;
+            vertical-align: middle;
         }
 
-        #sidecar-ui {
+        .entity-tag.history {
+            background: var(--blue-pale);
+            color: var(--blue-deep);
+        }
+
+        .entity-tag.new {
+            background: var(--green-pale);
+            color: var(--green-deep);
+        }
+
+        /* ═══════════════════════════════════════
+           SIDECAR — THE KNOWLEDGE MATRIX
+           ═══════════════════════════════════════ */
+
+        #sidecar-ui .overlay-content {
             display: flex;
             flex-direction: column;
+            height: 100%;
         }
 
-        #sidecar-header {
-            height: 120px;
-            padding: 20px;
-            overflow: hidden;
-            filter: blur(4px);
-            opacity: 0.6;
-            font-size: 16px;
-            border-bottom: 1px solid #ddd;
-            cursor: pointer;
-        }
-
-        #reflection-hub {
-            padding: 20px;
-            border-bottom: 1px solid #ddd;
-            font-family: var(--font-sans);
+        /* Blurred Anchor Header */
+        #sidecar-anchor {
             flex-shrink: 0;
-        }
-
-        .reflection-title {
-            font-size: 10px;
-            font-weight: bold;
-            letter-spacing: 1px;
-            color: #666;
-            margin-bottom: 10px;
-        }
-
-        .reflection-item {
-            font-size: 14px;
-            margin-bottom: 10px;
-            display: flex;
-            justify-content: space-between;
-        }
-
-        .reflection-add {
-            font-size: 14px;
-            color: #555;
+            padding: 28px 24px 20px;
+            font-family: var(--serif);
+            font-size: 16px;
+            line-height: 1.7;
+            color: var(--ink);
+            filter: blur(3.5px);
+            opacity: 0.5;
+            max-height: 140px;
+            overflow: hidden;
             cursor: pointer;
+            border-bottom: 1px solid var(--rule);
+            transition: filter 0.3s ease, opacity 0.3s ease, max-height 0.4s var(--ease-out-expo);
+            position: relative;
+        }
+
+        #sidecar-anchor::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 40px;
+            background: linear-gradient(transparent, var(--bg));
+            pointer-events: none;
+        }
+
+        #sidecar-anchor:hover {
+            filter: blur(2px);
+            opacity: 0.7;
+        }
+
+        #sidecar-anchor.hidden {
+            max-height: 0;
+            padding: 0 24px;
+            opacity: 0;
+            border-bottom-color: transparent;
+        }
+
+        /* Reflection Hub */
+        #reflection-hub {
+            flex-shrink: 0;
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--rule);
+            font-family: var(--sans);
+            transition: max-height 0.4s var(--ease-out-expo), opacity 0.3s ease, padding 0.4s var(--ease-out-expo);
+            overflow: hidden;
+        }
+
+        #reflection-hub.hidden {
+            max-height: 0;
+            opacity: 0;
+            padding: 0 24px;
+            border-bottom-color: transparent;
+        }
+
+        .reflection-label {
+            font-size: 9px;
+            font-weight: 600;
+            letter-spacing: 2.5px;
+            text-transform: uppercase;
+            color: var(--ink-ghost);
+            margin-bottom: 12px;
+        }
+
+        .reflection-entry {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 8px 0;
+            font-size: 13px;
+            line-height: 1.5;
+            color: var(--ink-soft);
+            border-bottom: 1px solid var(--rule);
+        }
+
+        .reflection-entry:last-of-type {
+            border-bottom: none;
+        }
+
+        .reflection-text {
+            flex: 1;
             font-style: italic;
         }
 
+        .reflection-actions {
+            flex-shrink: 0;
+            display: flex;
+            gap: 4px;
+        }
+
+        .reflection-actions span {
+            cursor: pointer;
+            font-size: 11px;
+            color: var(--ink-ghost);
+            padding: 4px;
+            border-radius: 3px;
+            transition: color 0.2s ease, background 0.2s ease;
+        }
+
+        .reflection-actions span:hover {
+            color: var(--ink);
+            background: var(--rule);
+        }
+
+        .reflection-add-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 10px;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--ink-ghost);
+            cursor: pointer;
+            padding: 6px 0;
+            transition: color 0.2s ease;
+        }
+
+        .reflection-add-btn:hover {
+            color: var(--ink-soft);
+        }
+
+        /* ═══════════════════════════════════════
+           BENTO GRID — THE HUB
+           ═══════════════════════════════════════ */
+
         #bento-grid {
             display: flex;
-            flex-grow: 1;
-            font-family: var(--font-sans);
-            transition: all 0.3s ease;
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
         }
 
         .bento-col {
             display: flex;
             flex-direction: column;
-            cursor: pointer;
-            border-right: 1px solid #eee;
             overflow-y: auto;
-            transition: all 0.3s ease;
+            overflow-x: hidden;
+            cursor: pointer;
+            transition: width 0.5s var(--ease-spring), background-color 0.3s ease;
+            position: relative;
         }
 
-        .bento-col:last-child {
-            border-right: none;
+        .bento-col.entities { width: 30%; background: var(--blue-ghost); }
+        .bento-col.words    { width: 26%; background: var(--yellow-ghost); }
+        .bento-col.idioms   { width: 44%; background: var(--green-ghost); }
+
+        .bento-col + .bento-col {
+            border-left: 1px solid rgba(0,0,0,0.04);
         }
 
-        .bento-col.entities {
-            width: 30%;
-            background-color: var(--blue-light);
-        }
-
-        .bento-col.words {
-            width: 26%;
-            background-color: var(--yellow-light);
-        }
-
-        .bento-col.idioms {
-            width: 44%;
-            background-color: var(--green-light);
-        }
-
-        .bento-header {
-            font-size: 10px;
-            font-weight: bold;
+        /* Column Header */
+        .col-header {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            font-family: var(--sans);
+            font-size: 9px;
+            font-weight: 600;
+            letter-spacing: 2px;
+            text-transform: uppercase;
             text-align: center;
-            padding: 10px 0;
+            padding: 14px 8px 10px;
+            transition: all 0.5s var(--ease-spring);
+        }
+
+        .bento-col.entities .col-header { color: var(--blue-deep); background: var(--blue-pale); }
+        .bento-col.words .col-header    { color: var(--yellow-deep); background: var(--yellow-pale); }
+        .bento-col.idioms .col-header   { color: var(--green-deep); background: var(--green-pale); }
+
+        /* Headword Items */
+        .headword {
+            font-family: var(--sans);
+            font-size: 13px;
+            font-weight: 500;
+            text-align: center;
+            padding: 12px 10px;
+            border-bottom: 1px solid rgba(0,0,0,0.04);
+            transition: all 0.5s var(--ease-spring);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Ghost cell for empty columns */
+        .ghost-cell {
+            flex: 1;
+            min-height: 60px;
+            opacity: 0.3;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: var(--sans);
+            font-size: 10px;
+            color: var(--ink-ghost);
             letter-spacing: 1px;
         }
 
-        .bento-item {
-            padding: 10px;
-            font-size: 14px;
-            text-align: center;
-            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-        }
-
-        #bento-grid.accordion-mode .bento-col {
-            width: 10%;
+        /* Definition Cards (hidden in hub, shown in expanded) */
+        .def-card {
+            margin: 8px 12px;
+            padding: 16px 18px;
+            border-radius: 8px;
+            opacity: 0;
+            max-height: 0;
             overflow: hidden;
-            justify-content: flex-start;
-            align-items: center;
+            transition: all 0.4s var(--ease-out-expo);
         }
 
-        #bento-grid.accordion-mode .bento-col.expanded {
+        .def-card .card-headword {
+            font-family: var(--sans);
+            font-weight: 600;
+            font-size: 15px;
+            margin-bottom: 4px;
+        }
+
+        .def-card .card-type {
+            font-family: var(--sans);
+            font-size: 9px;
+            font-weight: 600;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+            opacity: 0.6;
+        }
+
+        .def-card .card-definition {
+            font-family: var(--serif);
+            font-size: 15px;
+            line-height: 1.65;
+            color: var(--ink);
+        }
+
+        /* ═══════════════════════════════════════
+           ACCORDION MODE — EXPANDED COLUMN
+           ═══════════════════════════════════════ */
+
+        #bento-grid.accordion .bento-col {
+            width: 10%;
+            cursor: pointer;
+        }
+
+        #bento-grid.accordion .bento-col.expanded {
             width: 80%;
-            align-items: stretch;
-            overflow-y: auto;
+            cursor: default;
         }
 
-        #bento-grid.accordion-mode .bento-col:not(.expanded) .bento-header {
-            writing-mode: vertical-rl;
+        /* Collapsed sidebar: vertical label */
+        #bento-grid.accordion .bento-col:not(.expanded) .col-header {
+            writing-mode: vertical-lr;
             text-orientation: upright;
-            margin-top: 20px;
-        }
-
-        #bento-grid.accordion-mode .bento-col:not(.expanded) .bento-item {
-            display: none;
-        }
-
-        .card {
-            margin: 10px;
-            padding: 15px;
-            border-radius: 4px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-            display: none;
-        }
-
-        #bento-grid.accordion-mode .bento-col.expanded .card {
-            display: block;
-        }
-
-        .card-title {
-            font-weight: bold;
-            font-size: 14px;
-            margin-bottom: 5px;
-            color: #000;
-        }
-
-        .card-desc {
-            font-size: 12px;
-            color: #111;
-        }
-
-        #notes-ui {
+            padding: 20px 0;
+            font-size: 8px;
+            letter-spacing: 4px;
+            height: 100%;
             display: flex;
-            flex-direction: column;
-        }
-
-        #notes-top {
-            height: 40vh;
-            padding: 20px;
-            overflow-y: auto;
-            border-bottom: 1px solid #ccc;
-            font-size: 16px;
-        }
-
-        #notes-middle {
-            height: 30vh;
-            background: #2a2a2a;
-            color: #fff;
-            display: flex;
-            flex-direction: column;
-        }
-
-        #notes-bottom {
-            height: 30vh;
-            background: #ddd;
-            display: flex;
-            justify-content: center;
             align-items: center;
-            font-family: var(--font-sans);
-            color: #666;
+            justify-content: flex-start;
         }
 
-        #notes-input {
+        #bento-grid.accordion .bento-col:not(.expanded) .headword {
+            display: none;
+        }
+
+        #bento-grid.accordion .bento-col:not(.expanded) .ghost-cell {
+            display: none;
+        }
+
+        #bento-grid.accordion .bento-col:not(.expanded) .def-card {
+            display: none;
+        }
+
+        /* Expanded column: show definition cards */
+        #bento-grid.accordion .bento-col.expanded .headword {
+            display: none;
+        }
+
+        #bento-grid.accordion .bento-col.expanded .ghost-cell {
+            display: none;
+        }
+
+        #bento-grid.accordion .bento-col.expanded .def-card {
+            opacity: 1;
+            max-height: 300px;
+            margin: 6px 14px;
+            padding: 18px 20px;
+        }
+
+        #bento-grid.accordion .bento-col.expanded .col-header {
+            text-align: left;
+            padding: 16px 20px 12px;
+            font-size: 10px;
+        }
+
+        /* ═══════════════════════════════════════
+           NOTES / WRITING WORKSTATION (40/30/30)
+           ═══════════════════════════════════════ */
+
+        #notes-ui .overlay-content {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        #notes-source {
+            height: 40%;
+            padding: 24px;
+            overflow-y: auto;
+            border-bottom: 1px solid var(--rule);
+            font-family: var(--serif);
+            font-size: 17px;
+            line-height: 1.75;
+            color: var(--ink-soft);
+        }
+
+        #notes-source .source-label {
+            font-family: var(--sans);
+            font-size: 9px;
+            font-weight: 600;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--ink-ghost);
+            margin-bottom: 14px;
+        }
+
+        #notes-source .past-reflections {
+            margin-top: 20px;
+            padding-top: 16px;
+            border-top: 1px solid var(--rule);
+            font-family: var(--sans);
+            font-size: 12px;
+            line-height: 1.6;
+            color: var(--ink-ghost);
+        }
+
+        #notes-input-area {
+            height: 30%;
+            background: #1C1917;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #notes-textarea {
+            flex: 1;
             width: 100%;
-            flex-grow: 1;
             background: transparent;
             border: none;
-            color: #fff;
-            padding: 20px;
-            font-size: 16px;
-            font-family: var(--font-serif);
+            color: #F5F5F0;
+            padding: 20px 24px;
+            font-family: var(--serif);
+            font-size: 17px;
+            line-height: 1.65;
             resize: none;
             outline: none;
-            box-sizing: border-box;
         }
 
-        .notes-actions {
+        #notes-textarea::placeholder {
+            color: rgba(255,255,255,0.25);
+            font-style: italic;
+        }
+
+        .notes-toolbar {
             display: flex;
             justify-content: flex-end;
-            padding: 10px;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px 12px;
         }
 
-        .notes-actions button {
-            background: #fff;
+        .notes-toolbar button {
+            font-family: var(--sans);
+            font-size: 12px;
+            font-weight: 500;
+            padding: 6px 20px;
             border: none;
-            padding: 5px 15px;
+            border-radius: 4px;
             cursor: pointer;
-            border-radius: 3px;
+            transition: transform 0.15s ease, opacity 0.15s ease;
         }
 
-        #session-close {
-            padding: 40px 20px;
-            font-family: var(--font-sans);
+        .notes-toolbar button:active {
+            transform: scale(0.96);
+        }
+
+        .btn-save {
+            background: #F5F5F0;
+            color: #1C1917;
+        }
+
+        .btn-cancel {
+            background: rgba(255,255,255,0.1);
+            color: rgba(255,255,255,0.6);
+        }
+
+        #notes-keyboard {
+            height: 30%;
+            background: #E7E5E4;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: var(--sans);
+            font-size: 11px;
+            letter-spacing: 1px;
+            color: var(--ink-ghost);
+        }
+
+        /* ═══════════════════════════════════════
+           SESSION CLOSE (Bottom Pull)
+           ═══════════════════════════════════════ */
+
+        #session-close .overlay-content {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        /* Top zone: scrollable ARU text */
+        #session-aru-viewer {
+            height: 50%;
             overflow-y: auto;
-            max-width: 600px;
-            margin: 0 auto;
+            padding: 28px 24px;
+            border-bottom: 2px solid var(--rule);
+            font-family: var(--serif);
+            font-size: 17px;
+            line-height: 1.75;
+            color: var(--ink-soft);
+            scroll-behavior: smooth;
+        }
+
+        #session-aru-viewer .session-atu {
+            padding: 8px 4px;
+            margin-bottom: 4px;
+            border-radius: 4px;
+            transition: background-color 0.4s var(--ease-out-expo), box-shadow 0.4s var(--ease-out-expo);
+        }
+
+        #session-aru-viewer .session-atu + .session-atu {
+            text-indent: 1.8em;
+        }
+
+        #session-aru-viewer .session-atu.is-header {
+            text-indent: 0;
+            font-weight: 500;
+            font-size: 0.92em;
+            color: var(--ink-ghost);
+        }
+
+        #session-aru-viewer .session-atu.is-signature {
+            text-indent: 0;
+            margin-top: 1em;
+        }
+
+        #session-aru-viewer .session-atu.atu-highlighted {
+            background: var(--highlight-active);
+            box-shadow: inset 3px 0 0 var(--ink-soft);
+        }
+
+        /* Bottom zone: reflection timeline */
+        #session-reflections-zone {
+            height: 50%;
+            overflow-y: auto;
+            padding: 20px 24px;
+            font-family: var(--sans);
+        }
+
+        .session-zone-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .session-zone-label {
+            font-size: 9px;
+            font-weight: 600;
+            letter-spacing: 2.5px;
+            text-transform: uppercase;
+            color: var(--ink-ghost);
+        }
+
+        .session-close-btn {
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: var(--ink-ghost);
+            cursor: pointer;
+            padding: 6px 0;
+            transition: color 0.2s ease;
+        }
+
+        .session-close-btn:hover {
+            color: var(--ink-soft);
+        }
+
+        /* ARU-level reflection: wide card, amber border */
+        .session-aru-card {
+            margin-bottom: 16px;
+            padding: 16px 20px;
+            background: rgba(180, 160, 120, 0.06);
+            border-radius: 8px;
+            border-left: 4px solid #C4A35A;
+            cursor: default;
+        }
+
+        .session-aru-card .aru-card-label {
+            font-size: 9px;
+            font-weight: 600;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            color: #A08840;
+            margin-bottom: 6px;
+        }
+
+        .session-aru-card .aru-card-note {
+            font-family: var(--serif);
+            font-size: 16px;
+            line-height: 1.6;
+            color: var(--ink);
+        }
+
+        .session-aru-card .aru-card-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .session-aru-card .aru-card-actions span {
+            font-size: 11px;
+            color: var(--ink-ghost);
+            cursor: pointer;
+            transition: color 0.2s ease;
+        }
+
+        .session-aru-card .aru-card-actions span:hover {
+            color: var(--ink);
+        }
+
+        /* ATU-grouped reflection box */
+        .session-atu-group {
+            margin-bottom: 16px;
+            padding: 14px 16px;
+            background: rgba(0,0,0,0.02);
+            border-radius: 8px;
+            border-left: 3px solid var(--rule);
+            cursor: pointer;
+            transition: background 0.2s ease, border-color 0.2s ease;
+        }
+
+        .session-atu-group:hover {
+            background: rgba(0,0,0,0.04);
+            border-left-color: var(--ink-ghost);
+        }
+
+        .session-atu-group.active {
+            border-left-color: var(--ink-soft);
+            background: rgba(0,0,0,0.04);
+        }
+
+        .session-atu-snippet {
+            font-family: var(--serif);
+            font-size: 12px;
+            line-height: 1.4;
+            color: var(--ink-ghost);
+            margin-bottom: 10px;
+            font-style: italic;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .session-atu-note {
+            font-family: var(--serif);
+            font-size: 15px;
+            line-height: 1.55;
+            color: var(--ink-soft);
+            padding: 4px 0;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .session-atu-note + .session-atu-note {
+            border-top: 1px solid var(--rule);
+            margin-top: 4px;
+            padding-top: 8px;
+        }
+
+        .session-atu-note-text {
+            flex: 1;
+        }
+
+        .session-atu-note-actions {
+            flex-shrink: 0;
+            display: flex;
+            gap: 4px;
+        }
+
+        .session-atu-note-actions span {
+            font-family: var(--sans);
+            font-size: 10px;
+            color: var(--ink-ghost);
+            cursor: pointer;
+            padding: 2px 4px;
+            border-radius: 3px;
+            transition: color 0.2s ease, background 0.2s ease;
+        }
+
+        .session-atu-note-actions span:hover {
+            color: var(--ink);
+            background: var(--rule);
+        }
+
+        .session-empty {
+            font-family: var(--serif);
+            font-size: 16px;
+            color: var(--ink-ghost);
+            font-style: italic;
+            padding: 20px 0;
+        }
+
+        .session-add-aru {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 12px;
+            font-size: 12px;
+            font-weight: 500;
+            color: #A08840;
+            cursor: pointer;
+            padding: 8px 0;
+            transition: color 0.2s ease;
+        }
+
+        .session-add-aru:hover {
+            color: #7A6830;
+        }
+
+        /* ═══════════════════════════════════════
+           PROGRESS DOTS (subtle, only on scroll end)
+           ═══════════════════════════════════════ */
+
+        #progress-bar {
+            position: fixed;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            opacity: 0;
+            transition: opacity 0.6s ease;
+            z-index: 30;
+            pointer-events: none;
+        }
+
+        #progress-bar.visible {
+            opacity: 1;
+        }
+
+        .progress-dot {
+            width: 3px;
+            height: 3px;
+            border-radius: 50%;
+            background: var(--ink-ghost);
+            transition: background 0.3s ease, transform 0.3s ease;
+        }
+
+        .progress-dot.active {
+            background: var(--ink-soft);
+            transform: scale(1.5);
+        }
+
+        /* ═══════════════════════════════════════
+           ANIMATIONS & MICRO-INTERACTIONS
+           ═══════════════════════════════════════ */
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes subtlePulse {
+            0%, 100% { opacity: 0.4; }
+            50% { opacity: 0.7; }
+        }
+
+        .animate-in {
+            animation: fadeInUp 0.5s var(--ease-out-expo) forwards;
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 0;
+            background: transparent;
+        }
+
+        /* Selection styling */
+        ::selection {
+            background: rgba(180, 160, 120, 0.3);
         }
     </style>
 </head>
 
 <body>
 
-    <button id="btn-context" class="nav-btn" onclick="openContext()" title="Open Context">⇞</button>
-    <button id="btn-prev" class="nav-btn" onclick="scrollToPrevATU()" title="Previous Paragraph">↑</button>
-    <button id="btn-next" class="nav-btn" onclick="scrollToNextATU()" title="Next Paragraph">↓</button>
-    <button id="btn-session" class="nav-btn" onclick="openSessionClose()" title="End Session">⇟</button>
-
-    <div id="aru-container">
-        <p class="atu">Letter 2</p>
-        <p class="atu">To Mrs. Saville, England.</p>
-        <p class="atu">Archangel, 28th March, 17—.</p>
-        <p class="atu">How slowly the time passes here, encompassed as I am by frost and snow! Yet a second step is
-            taken towards my enterprise. I have hired a vessel and am occupied in collecting my sailors; those whom I
-            have already engaged appear to be men on whom I can depend and are certainly possessed of dauntless courage.
-        </p>
-        <p class="atu">But I have one want which I have never yet been able to satisfy, and the absence of the object of
-            which I now feel as a most severe evil, I have no friend, Margaret: when I am glowing with the enthusiasm of
-            success, there will be none to participate my joy; if I am assailed by disappointment, no one will endeavour
-            to sustain me in dejection. I shall commit my thoughts to paper, it is true; but that is a poor medium for
-            the communication of feeling. I desire the company of a man who could sympathise with me, whose eyes would
-            reply to mine. You may deem me romantic, my dear sister, but I bitterly feel the want of a friend. I have no
-            one near me, gentle yet courageous, possessed of a cultivated as well as of a capacious mind, whose tastes
-            are like my own, to approve or amend my plans. How would such a friend repair the faults of your poor
-            brother! I am too ardent in execution and too impatient of difficulties. But it is a still greater evil to
-            me that I am self-educated: for the first fourteen years of my life I ran wild on a common and read nothing
-            but our Uncle Thomas’ books of voyages. At that age I became acquainted with the celebrated poets of our own
-            country; but it was only when it had ceased to be in my power to derive its most important benefits from
-            such a conviction that I perceived the necessity of becoming acquainted with more languages than that of my
-            native country. Now I am twenty-eight and am in reality more illiterate than many schoolboys of fifteen. It
-            is true that I have thought more and that my daydreams are more extended and magnificent, but they want (as
-            the painters call it) keeping; and I greatly need a friend who would have sense enough not to despise me as
-            romantic, and affection enough for me to endeavour to regulate my mind.</p>
-        <p class="atu">Well, these are useless complaints; I shall certainly find no friend on the wide ocean, nor even
-            here in Archangel, among merchants and seamen. Yet some feelings, unallied to the dross of human nature,
-            beat even in these rugged bosoms. My lieutenant, for instance, is a man of wonderful courage and enterprise;
-            he is madly desirous of glory, or rather, to word my phrase more characteristically, of advancement in his
-            profession. He is an Englishman, and in the midst of national and professional prejudices, unsoftened by
-            cultivation, retains some of the noblest endowments of humanity. I first became acquainted with him on board
-            a whale vessel; finding that he was unemployed in this city, I easily engaged him to assist in my
-            enterprise.</p>
-        <p class="atu">The master is a person of an excellent disposition and is remarkable in the ship for his
-            gentleness and the mildness of his discipline. This circumstance, added to his well-known integrity and
-            dauntless courage, made me very desirous to engage him. A youth passed in solitude, my best years spent
-            under your gentle and feminine fosterage, has so refined the groundwork of my character that I cannot
-            overcome an intense distaste to the usual brutality exercised on board ship: I have never believed it to be
-            necessary, and when I heard of a mariner equally noted for his kindliness of heart and the respect and
-            obedience paid to him by his crew, I felt myself peculiarly fortunate in being able to secure his services.
-            I heard of him first in rather a romantic manner, from a lady who owes to him the happiness of her life.
-            This, briefly, is his story. Some years ago he loved a young Russian lady of moderate fortune, and having
-            amassed a considerable sum in prize-money, the father of the girl consented to the match. He saw his
-            mistress once before the destined ceremony; but she was bathed in tears, and throwing herself at his feet,
-            entreated him to spare her, confessing at the same time that she loved another, but that he was poor, and
-            that her father would never consent to the union. My generous friend reassured the suppliant, and on being
-            informed of the name of her lover, instantly abandoned his pursuit. He had already bought a farm with his
-            money, on which he had designed to pass the remainder of his life; but he bestowed the whole on his rival,
-            together with the remains of his prize-money to purchase stock, and then himself solicited the young woman’s
-            father to consent to her marriage with her lover. But the old man decidedly refused, thinking himself bound
-            in honour to my friend, who, when he found the father inexorable, quitted his country, nor returned until he
-            heard that his former mistress was married according to her inclinations. “What a noble fellow!” you will
-            exclaim. He is so; but then he is wholly uneducated: he is as silent as a Turk, and a kind of ignorant
-            carelessness attends him, which, while it renders his conduct the more astonishing, detracts from the
-            interest and sympathy which otherwise he would command.</p>
-        <p class="atu">Yet do not suppose, because I complain a little or because I can conceive a consolation for my
-            toils which I may never know, that I am wavering in my resolutions. Those are as fixed as fate, and my
-            voyage is only now delayed until the weather shall permit my embarkation. The winter has been dreadfully
-            severe, but the spring promises well, and it is considered as a remarkably early season, so that perhaps I
-            may sail sooner than I expected. I shall do nothing rashly: you know me sufficiently to confide in my
-            prudence and considerateness whenever the safety of others is committed to my care.</p>
-        <p class="atu">I cannot describe to you my sensations on the near prospect of my undertaking. It is impossible
-            to communicate to you a conception of the trembling sensation, half pleasurable and half fearful, with which
-            I am preparing to depart. I am going to unexplored regions, to “the land of mist and snow,” but I shall kill
-            no albatross; therefore do not be alarmed for my safety or if I should come back to you as worn and woeful
-            as the “Ancient Mariner.” You will smile at my allusion, but I will disclose a secret. I have often
-            attributed my attachment to, my passionate enthusiasm for, the dangerous mysteries of ocean to that
-            production of the most imaginative of modern poets. There is something at work in my soul which I do not
-            understand. I am practically industrious—painstaking, a workman to execute with perseverance and labour—but
-            besides this there is a love for the marvellous, a belief in the marvellous, intertwined in all my projects,
-            which hurries me out of the common pathways of men, even to the wild sea and unvisited regions I am about to
-            explore.</p>
-        <p class="atu">But to return to dearer considerations. Shall I meet you again, after having traversed immense
-            seas, and returned by the most southern cape of Africa or America? I dare not expect such success, yet I
-            cannot bear to look on the reverse of the picture. Continue for the present to write to me by every
-            opportunity: I may receive your letters on some occasions when I need them most to support my spirits. I
-            love you very tenderly. Remember me with affection, should you never hear from me again.</p>
-        <p class="atu">Your affectionate brother,<br>Robert Walton</p>
+    <!-- Pull indicators for gesture feedback -->
+    <div id="pull-indicator-top">
+        <span id="pull-top-text">Pull for context</span>
+    </div>
+    <div id="pull-indicator-bottom">
+        <span id="pull-bottom-text">Pull to close session</span>
     </div>
 
+    <!-- Progress dots -->
+    <div id="progress-bar"></div>
+
+    <!-- ═══ READING SURFACE ═══ -->
+    <div id="reading-surface">
+        <div id="aru-container">
+            <p class="atu is-header" data-end-score="0">Letter 2</p>
+            <p class="atu is-header" data-end-score="0">To Mrs. Saville, England.</p>
+            <p class="atu is-header" data-end-score="0">Archangel, 28th March, 17—.</p>
+            <p class="atu" data-end-score="35">How slowly the time passes here, encompassed as I am by frost and snow! Yet a second step is taken towards my enterprise. I have hired a vessel and am occupied in collecting my sailors; those whom I have already engaged appear to be men on whom I can depend and are certainly possessed of dauntless courage.</p>
+            <p class="atu" data-end-score="55">But I have one want which I have never yet been able to satisfy, and the absence of the object of which I now feel as a most severe evil, I have no friend, Margaret: when I am glowing with the enthusiasm of success, there will be none to participate my joy; if I am assailed by disappointment, no one will endeavour to sustain me in dejection. I shall commit my thoughts to paper, it is true; but that is a poor medium for the communication of feeling. I desire the company of a man who could sympathise with me, whose eyes would reply to mine. You may deem me romantic, my dear sister, but I bitterly feel the want of a friend. I have no one near me, gentle yet courageous, possessed of a cultivated as well as of a capacious mind, whose tastes are like my own, to approve or amend my plans. How would such a friend repair the faults of your poor brother! I am too ardent in execution and too impatient of difficulties. But it is a still greater evil to me that I am self-educated: for the first fourteen years of my life I ran wild on a common and read nothing but our Uncle Thomas' books of voyages. At that age I became acquainted with the celebrated poets of our own country; but it was only when it had ceased to be in my power to derive its most important benefits from such a conviction that I perceived the necessity of becoming acquainted with more languages than that of my native country. Now I am twenty-eight and am in reality more illiterate than many schoolboys of fifteen. It is true that I have thought more and that my daydreams are more extended and magnificent, but they want (as the painters call it) keeping; and I greatly need a friend who would have sense enough not to despise me as romantic, and affection enough for me to endeavour to regulate my mind.</p>
+            <p class="atu" data-end-score="60">Well, these are useless complaints; I shall certainly find no friend on the wide ocean, nor even here in Archangel, among merchants and seamen. Yet some feelings, unallied to the dross of human nature, beat even in these rugged bosoms. My lieutenant, for instance, is a man of wonderful courage and enterprise; he is madly desirous of glory, or rather, to word my phrase more characteristically, of advancement in his profession. He is an Englishman, and in the midst of national and professional prejudices, unsoftened by cultivation, retains some of the noblest endowments of humanity. I first became acquainted with him on board a whale vessel; finding that he was unemployed in this city, I easily engaged him to assist in my enterprise.</p>
+            <p class="atu" data-end-score="70">The master is a person of an excellent disposition and is remarkable in the ship for his gentleness and the mildness of his discipline. This circumstance, added to his well-known integrity and dauntless courage, made me very desirous to engage him. A youth passed in solitude, my best years spent under your gentle and feminine fosterage, has so refined the groundwork of my character that I cannot overcome an intense distaste to the usual brutality exercised on board ship: I have never believed it to be necessary, and when I heard of a mariner equally noted for his kindliness of heart and the respect and obedience paid to him by his crew, I felt myself peculiarly fortunate in being able to secure his services. I heard of him first in rather a romantic manner, from a lady who owes to him the happiness of her life. This, briefly, is his story. Some years ago he loved a young Russian lady of moderate fortune, and having amassed a considerable sum in prize-money, the father of the girl consented to the match. He saw his mistress once before the destined ceremony; but she was bathed in tears, and throwing herself at his feet, entreated him to spare her, confessing at the same time that she loved another, but that he was poor, and that her father would never consent to the union. My generous friend reassured the suppliant, and on being informed of the name of her lover, instantly abandoned his pursuit. He had already bought a farm with his money, on which he had designed to pass the remainder of his life; but he bestowed the whole on his rival, together with the remains of his prize-money to purchase stock, and then himself solicited the young woman's father to consent to her marriage with her lover. But the old man decidedly refused, thinking himself bound in honour to my friend, who, when he found the father inexorable, quitted his country, nor returned until he heard that his former mistress was married according to her inclinations. "What a noble fellow!" you will exclaim. He is so; but then he is wholly uneducated: he is as silent as a Turk, and a kind of ignorant carelessness attends him, which, while it renders his conduct the more astonishing, detracts from the interest and sympathy which otherwise he would command.</p>
+            <p class="atu" data-end-score="45">Yet do not suppose, because I complain a little or because I can conceive a consolation for my toils which I may never know, that I am wavering in my resolutions. Those are as fixed as fate, and my voyage is only now delayed until the weather shall permit my embarkation. The winter has been dreadfully severe, but the spring promises well, and it is considered as a remarkably early season, so that perhaps I may sail sooner than I expected. I shall do nothing rashly: you know me sufficiently to confide in my prudence and considerateness whenever the safety of others is committed to my care.</p>
+            <p class="atu" data-end-score="80">I cannot describe to you my sensations on the near prospect of my undertaking. It is impossible to communicate to you a conception of the trembling sensation, half pleasurable and half fearful, with which I am preparing to depart. I am going to unexplored regions, to "the land of mist and snow," but I shall kill no albatross; therefore do not be alarmed for my safety or if I should come back to you as worn and woeful as the "Ancient Mariner." You will smile at my allusion, but I will disclose a secret. I have often attributed my attachment to, my passionate enthusiasm for, the dangerous mysteries of ocean to that production of the most imaginative of modern poets. There is something at work in my soul which I do not understand. I am practically industrious—painstaking, a workman to execute with perseverance and labour—but besides this there is a love for the marvellous, a belief in the marvellous, intertwined in all my projects, which hurries me out of the common pathways of men, even to the wild sea and unvisited regions I am about to explore.</p>
+            <p class="atu" data-end-score="90">But to return to dearer considerations. Shall I meet you again, after having traversed immense seas, and returned by the most southern cape of Africa or America? I dare not expect such success, yet I cannot bear to look on the reverse of the picture. Continue for the present to write to me by every opportunity: I may receive your letters on some occasions when I need them most to support my spirits. I love you very tenderly. Remember me with affection, should you never hear from me again.</p>
+            <p class="atu is-signature" data-end-score="100">Your affectionate brother,<br>Robert Walton</p>
+        </div>
+    </div>
+
+    <!-- ═══ CONTEXT OVERLAY (Top Pull) ═══ -->
     <div id="context-ui" class="overlay">
-        <span class="close-btn" onclick="closeOverlays()">[ Close & Return to Reading ]</span>
-        <div class="context-section">
-            <h2>Session Context (Relevant Now)</h2>
-            <p class="context-text">Walton has successfully reached Archangel and is executing his plan to hire a vessel
-                and crew for the polar expedition. He is battling feelings of severe isolation as he prepares for
-                departure.</p>
+        <div class="overlay-backdrop"></div>
+        <div class="overlay-content">
+            <span class="context-close" onclick="closeOverlay('context-ui')">Return to reading</span>
 
-            <h3>Entity Tracker</h3>
-            <ul class="entity-list">
-                <li><span class="entity-name">Robert Walton</span> <span class="entity-tag">History</span><br>Captain of
-                    the expedition. Previously wrote from St. Petersburgh outlining his grand ambitions.</li>
-                <li><span class="entity-name">Mrs. Saville / Margaret</span> <span
-                        class="entity-tag">History</span><br>Walton's sister in England, his sole confidante and
-                    correspondent.</li>
-                <li><span class="entity-name">Archangel</span> <span class="entity-tag">History</span><br>The Russian
-                    port city Walton planned to travel to from St. Petersburgh to hire his ship.</li>
-                <li><span class="entity-name">Uncle Thomas</span> <span class="entity-tag">History</span><br>Walton's
-                    uncle whose library of voyages fueled his early childhood passions.</li>
-                <li><span class="entity-name">The Lieutenant</span> <span class="entity-tag"
-                        style="background:#e6fffa; color:#004d00;">New</span><br>An ambitious, unrefined, but noble
-                    English officer Walton hired for the voyage.</li>
-                <li><span class="entity-name">The Master</span> <span class="entity-tag"
-                        style="background:#e6fffa; color:#004d00;">New</span><br>An uneducated but remarkably gentle and
-                    honorable ship master with a tragic romantic past.</li>
-            </ul>
-        </div>
+            <div class="context-section">
+                <h2>Session Context</h2>
+                <p class="context-prose">Walton has successfully reached Archangel and is executing his plan to hire a vessel and crew for the polar expedition. He is battling feelings of severe isolation as he prepares for departure.</p>
 
-        <div class="context-section">
-            <h2>Global Context (The Story So Far)</h2>
-            <p class="context-text">Robert Walton, an ambitious explorer, has set out on a perilous journey to the North
-                Pole to discover a northern passage and uncover the secrets of magnetism. After years of rigorous
-                physical and mental preparation—following a failed attempt at becoming a poet—he arrived in St.
-                Petersburgh. Filled with unwavering optimism and driven by childhood dreams, he detailed his plans to
-                his sister, Mrs. Saville, before departing for Archangel to secure a ship and crew.</p>
+                <h2 style="margin-top:36px">Entities Encountered</h2>
+                <ul class="entity-list">
+                    <li><span class="entity-name">Robert Walton</span><span class="entity-tag history">History</span><br>Captain of the expedition. Previously wrote from St. Petersburgh outlining his grand ambitions.</li>
+                    <li><span class="entity-name">Mrs. Saville / Margaret</span><span class="entity-tag history">History</span><br>Walton's sister in England, his sole confidante and correspondent.</li>
+                    <li><span class="entity-name">Archangel</span><span class="entity-tag history">History</span><br>The Russian port city Walton planned to travel to from St. Petersburgh to hire his ship.</li>
+                    <li><span class="entity-name">Uncle Thomas</span><span class="entity-tag history">History</span><br>Walton's uncle whose library of voyages fueled his early childhood passions.</li>
+                    <li><span class="entity-name">The Lieutenant</span><span class="entity-tag new">New</span><br>An ambitious, unrefined, but noble English officer Walton hired for the voyage.</li>
+                    <li><span class="entity-name">The Master</span><span class="entity-tag new">New</span><br>An uneducated but remarkably gentle and honorable ship master with a tragic romantic past.</li>
+                </ul>
+            </div>
+
+            <div class="context-section">
+                <h2>Global Context — The Story So Far</h2>
+                <p class="context-prose">Robert Walton, an ambitious explorer, has set out on a perilous journey to the North Pole to discover a northern passage and uncover the secrets of magnetism. After years of rigorous physical and mental preparation—following a failed attempt at becoming a poet—he arrived in St. Petersburgh. Filled with unwavering optimism and driven by childhood dreams, he detailed his plans to his sister, Mrs. Saville, before departing for Archangel to secure a ship and crew.</p>
+            </div>
         </div>
     </div>
 
-    <div id="session-close" class="overlay">
-        <span class="close-btn" onclick="closeOverlays()">[ Resume Session ]</span>
-        <h2>ARU Session Complete</h2>
-        <p>Your Reflections for this session:</p>
-        <div id="session-reflections-list"></div>
-        <div class="reflection-add" onclick="openNotesMode('Global ARU Synthesis')">[+ Add ARU Summary]</div>
-    </div>
-
+    <!-- ═══ SIDECAR OVERLAY ═══ -->
     <div id="sidecar-ui" class="overlay">
-        <div id="sidecar-header" onclick="closeSidecar()"></div>
+        <div class="overlay-backdrop"></div>
+        <div class="overlay-content">
+            <div id="sidecar-anchor" onclick="closeSidecar()"></div>
 
-        <div id="reflection-hub">
-            <div class="reflection-title">REFLECTION</div>
-            <div id="reflection-list"></div>
-            <div class="reflection-add" onclick="openNotesMode()">[+ Add new reflection] ✏️</div>
-        </div>
+            <div id="reflection-hub">
+                <div class="reflection-label">Reflection</div>
+                <div id="reflection-list"></div>
+                <div class="reflection-add-btn" onclick="openNotes()">+ Add reflection</div>
+            </div>
 
-        <div id="bento-grid">
-            <div class="bento-col entities" onclick="toggleColumn(this)">
-                <div class="bento-header">ENTITIES</div>
-            </div>
-            <div class="bento-col words" onclick="toggleColumn(this)">
-                <div class="bento-header">WORDS</div>
-            </div>
-            <div class="bento-col idioms" onclick="toggleColumn(this)">
-                <div class="bento-header">IDIOMS</div>
+            <div id="bento-grid">
+                <div class="bento-col entities" onclick="expandColumn(this, event)">
+                    <div class="col-header">Entities</div>
+                </div>
+                <div class="bento-col words" onclick="expandColumn(this, event)">
+                    <div class="col-header">Words</div>
+                </div>
+                <div class="bento-col idioms" onclick="expandColumn(this, event)">
+                    <div class="col-header">Idioms</div>
+                </div>
             </div>
         </div>
     </div>
 
+    <!-- ═══ NOTES / WRITING WORKSTATION ═══ -->
     <div id="notes-ui" class="overlay">
-        <div id="notes-top">
-            <div id="notes-context-text"></div>
-            <hr style="border:0; border-top:1px solid #eee; margin:20px 0;">
-            <div id="notes-history"></div>
-        </div>
-        <div id="notes-middle">
-            <textarea id="notes-input" placeholder="Synthesize this..."></textarea>
-            <div class="notes-actions">
-                <button onclick="saveNote()">Save</button>
-                <button onclick="closeNotesMode()"
-                    style="background:#555; color:#fff; margin-left:10px;">Cancel</button>
+        <div class="overlay-backdrop"></div>
+        <div class="overlay-content">
+            <div id="notes-source">
+                <div class="source-label">Source</div>
+                <div id="notes-source-text"></div>
+                <div id="notes-past-reflections" class="past-reflections"></div>
             </div>
+            <div id="notes-input-area">
+                <textarea id="notes-textarea" placeholder="What are you thinking..."></textarea>
+                <div class="notes-toolbar">
+                    <button class="btn-cancel" onclick="closeNotes()">Cancel</button>
+                    <button class="btn-save" onclick="saveNote()">Save</button>
+                </div>
+            </div>
+            <div id="notes-keyboard">System Keyboard</div>
         </div>
-        <div id="notes-bottom">
-            [ System Keyboard Area ]
+    </div>
+
+    <!-- ═══ SESSION CLOSE (Bottom Pull) ═══ -->
+    <div id="session-close" class="overlay">
+        <div class="overlay-backdrop"></div>
+        <div class="overlay-content">
+            <!-- Top: Scrollable ARU text -->
+            <div id="session-aru-viewer"></div>
+
+            <!-- Bottom: Reflection timeline -->
+            <div id="session-reflections-zone">
+                <div class="session-zone-header">
+                    <span class="session-zone-label">Your Path Through This Sitting</span>
+                    <span class="session-close-btn" onclick="closeOverlay('session-close')">Resume</span>
+                </div>
+                <div id="session-reflections"></div>
+                <div class="session-add-aru" onclick="openSessionNotes()">+ Add ARU reflection</div>
+            </div>
         </div>
     </div>
 
     <script>
-        /*
-         * Octopus Reading Engine Prototype script.
-         * Handles DOM initialization, sentence parsing, arrow navigation,
-         * dynamic Sidecar data population based on ATU keys, and Notes aggregation.
-         * Order of steps:
-         * 1. Define embedded bento data dictionary.
-         * 2. Initialize the application and attach event listeners.
-         * 3. Handle scroll navigation logic.
-         * 4. Process user gestures (taps and long presses).
-         * 5. Handle UI transitions and dynamic data injection.
-         */
+    /* ═══════════════════════════════════════════════════════
+       OCTOPUS READING ENGINE — CORE
+       ═══════════════════════════════════════════════════════ */
 
-        // #region Data Definitions
-        /*
-         * Data store for all ATU entities, words, and idioms.
-         * Keys are the first 30 characters of the target paragraph.
-         */
-        const bentoDb = {
-            "To Mrs. Saville, England.": {
-                entities: [
-                    { name: "Mrs. Saville", type: "History", color: "rgba(0,0,0,1)", bg: "#CCE5FF", desc: "Walton's sister, the recipient of these letters." },
-                    { name: "England", type: "Universal", color: "rgba(0,0,0,0.8)", bg: "#E6F2FF", desc: "Country of origin for Walton and his sister." }
-                ], words: [], idioms: []
-            },
-            "Archangel, 28th March, 17—.": {
-                entities: [
-                    { name: "Archangel", type: "History", color: "rgba(0,0,0,1)", bg: "#CCE5FF", desc: "Russian port city acting as the launch pad for the expedition." }
-                ], words: [], idioms: []
-            },
-            "How slowly the time passes her": {
-                entities: [],
-                words: [
-                    { word: "Encompassed", type: "Universal", color: "rgba(0,0,0,1)", bg: "#665C00", desc: "Surrounded and have or hold within." },
-                    { word: "Dauntless", type: "Universal", color: "rgba(0,0,0,0.8)", bg: "#998B00", desc: "Showing fearlessness and determination." }
-                ],
-                idioms: [
-                    { phrase: "Encompassed... by frost and snow", type: "Context", color: "rgba(0,0,0,1)", bg: "#004D00", desc: "Surrounded completely by the harsh winter environment." }
-                ]
-            },
-            "But I have one want which I ha": {
-                entities: [
-                    { name: "Margaret", type: "History", color: "rgba(0,0,0,1)", bg: "#CCE5FF", desc: "Walton's sister, also addressed as Mrs. Saville." },
-                    { name: "Uncle Thomas", type: "Lore", color: "rgba(0,0,0,0.8)", bg: "#E6F2FF", desc: "Owner of the books of voyages that educated young Walton." }
-                ],
-                words: [
-                    { word: "Capacious", type: "Universal", color: "rgba(0,0,0,1)", bg: "#665C00", desc: "Having a lot of space inside; roomy." },
-                    { word: "Ardent", type: "Universal", color: "rgba(0,0,0,0.8)", bg: "#998B00", desc: "Enthusiastic or passionate." }
-                ],
-                idioms: [
-                    { phrase: "Ran wild on a common", type: "Context", color: "rgba(0,0,0,1)", bg: "#004D00", desc: "Growing up without formal constraints or disciplined education." },
-                    { phrase: "Want... keeping", type: "Lore", color: "rgba(0,0,0,0.8)", bg: "#338033", desc: "A painter's term meaning a lack of proper balance or harmony." }
-                ]
-            },
-            "Well, these are useless compla": {
-                entities: [
-                    { name: "The Lieutenant", type: "New", color: "rgba(0,0,0,1)", bg: "#CCE5FF", desc: "An ambitious, unrefined, but noble English officer." }
-                ],
-                words: [
-                    { word: "Dross", type: "Universal", color: "rgba(0,0,0,1)", bg: "#665C00", desc: "Something regarded as worthless; rubbish." },
-                    { word: "Unallied", type: "Universal", color: "rgba(0,0,0,0.8)", bg: "#998B00", desc: "Not allied or connected." }
-                ],
-                idioms: [
-                    { phrase: "Dross of human nature", type: "Context", color: "rgba(0,0,0,1)", bg: "#004D00", desc: "The base, worthless aspects of humanity." }
-                ]
-            },
-            "The master is a person of an e": {
-                entities: [
-                    { name: "The Master", type: "New", color: "rgba(0,0,0,1)", bg: "#CCE5FF", desc: "A remarkably gentle ship captain with a tragic romantic past." }
-                ],
-                words: [
-                    { word: "Inexorable", type: "Universal", color: "rgba(0,0,0,1)", bg: "#665C00", desc: "Impossible to stop or prevent." },
-                    { word: "Suppliant", type: "Universal", color: "rgba(0,0,0,0.8)", bg: "#998B00", desc: "A person making a humble plea." }
-                ],
-                idioms: [
-                    { phrase: "Bathed in tears", type: "Context", color: "rgba(0,0,0,1)", bg: "#004D00", desc: "Crying profusely." },
-                    { phrase: "Silent as a Turk", type: "Context", color: "rgba(0,0,0,0.8)", bg: "#338033", desc: "An archaic idiom denoting extreme reticence or quietness." }
-                ]
-            },
-            "Yet do not suppose, because I ": {
-                entities: [],
-                words: [
-                    { word: "Embarkation", type: "Universal", color: "rgba(0,0,0,1)", bg: "#665C00", desc: "The process of loading a passenger ship." }
-                ],
-                idioms: [
-                    { phrase: "Fixed as fate", type: "Context", color: "rgba(0,0,0,1)", bg: "#004D00", desc: "Unchangeable and inevitable." }
-                ]
-            },
-            "I cannot describe to you my se": {
-                entities: [
-                    { name: "Ancient Mariner", type: "Lore", color: "rgba(0,0,0,1)", bg: "#CCE5FF", desc: "Reference to Coleridge's poem highlighting the danger of the sea." }
-                ],
-                words: [
-                    { word: "Allusion", type: "Universal", color: "rgba(0,0,0,1)", bg: "#665C00", desc: "An expression designed to call something to mind without mentioning it." },
-                    { word: "Perseverance", type: "Universal", color: "rgba(0,0,0,0.8)", bg: "#998B00", desc: "Persistence in doing something despite difficulty." }
-                ],
-                idioms: [
-                    { phrase: "Kill no albatross", type: "Lore", color: "rgba(0,0,0,1)", bg: "#004D00", desc: "A promise not to bring a curse upon the voyage." }
-                ]
-            },
-            "But to return to dearer consid": {
-                entities: [
-                    { name: "Africa", type: "History", color: "rgba(0,0,0,1)", bg: "#CCE5FF", desc: "The continent." },
-                    { name: "America", type: "History", color: "rgba(0,0,0,0.8)", bg: "#E6F2FF", desc: "The continent." }
-                ],
-                words: [
-                    { word: "Traversed", type: "Universal", color: "rgba(0,0,0,1)", bg: "#665C00", desc: "Travel across or through." }
-                ],
-                idioms: [
-                    { phrase: "Reverse of the picture", type: "Context", color: "rgba(0,0,0,1)", bg: "#004D00", desc: "The opposite or negative possible outcome." }
-                ]
-            }
-        };
+    // ─── DATA ───────────────────────────────────────────
 
-        let notesDb = {};
-        // #endregion
-
-        // #region Initialization
-        /*
-         * Initializes the application by wrapping sentences and attaching event listeners.
-         */
-        function initApp() {
-            wrapSentences();
-            attachGestureListeners();
+    const bentoDb = {
+        "To Mrs. Saville, England.": {
+            entities: [
+                { name: "Mrs. Saville", type: "History", depth: 0.9, desc: "Walton's sister, the recipient of these letters." },
+                { name: "England", type: "Universal", depth: 0.2, desc: "Country of origin for Walton and his sister." }
+            ], words: [], idioms: []
+        },
+        "Archangel, 28th March, 17—.": {
+            entities: [
+                { name: "Archangel", type: "History", depth: 0.8, desc: "Russian port city acting as the launch pad for the expedition." }
+            ], words: [], idioms: []
+        },
+        "How slowly the time passes her": {
+            entities: [],
+            words: [
+                { name: "Encompassed", type: "Universal", depth: 0.3, desc: "Surrounded and have or hold within." },
+                { name: "Dauntless", type: "Universal", depth: 0.2, desc: "Showing fearlessness and determination." }
+            ],
+            idioms: [
+                { name: "Encompassed by frost and snow", type: "Contextual", depth: 0.7, desc: "Surrounded completely by the harsh winter environment, emphasizing Walton's physical and psychological isolation." }
+            ]
+        },
+        "But I have one want which I ha": {
+            entities: [
+                { name: "Margaret", type: "History", depth: 0.9, desc: "Walton's sister, also addressed as Mrs. Saville." },
+                { name: "Uncle Thomas", type: "Lore", depth: 1.0, desc: "Owner of the books of voyages that educated young Walton." }
+            ],
+            words: [
+                { name: "Capacious", type: "Universal", depth: 0.2, desc: "Having a lot of space inside; roomy. Here describing the ideal friend's mind." },
+                { name: "Ardent", type: "Universal", depth: 0.2, desc: "Enthusiastic or passionate. Walton's self-diagnosis of his own temperament." }
+            ],
+            idioms: [
+                { name: "Ran wild on a common", type: "Contextual", depth: 0.8, desc: "Growing up without formal constraints or disciplined education, roaming the shared public land." },
+                { name: "Want… keeping", type: "Lore", depth: 1.0, desc: "A painter's term meaning a lack of proper balance, tonal harmony, or coherence in a composition." }
+            ]
+        },
+        "Well, these are useless compla": {
+            entities: [
+                { name: "The Lieutenant", type: "New", depth: 0.9, desc: "An ambitious, unrefined, but noble English officer hired for the voyage." }
+            ],
+            words: [
+                { name: "Dross", type: "Universal", depth: 0.3, desc: "Something regarded as worthless; rubbish. Originally a metallurgical term for impurities." },
+                { name: "Unallied", type: "Universal", depth: 0.2, desc: "Not allied or connected to; standing apart from." }
+            ],
+            idioms: [
+                { name: "Dross of human nature", type: "Contextual", depth: 0.7, desc: "The base, worthless aspects of humanity — the impurities that remain when noble qualities are refined away." }
+            ]
+        },
+        "The master is a person of an e": {
+            entities: [
+                { name: "The Master", type: "New", depth: 0.9, desc: "A remarkably gentle ship captain with a tragic romantic past involving a Russian lady." }
+            ],
+            words: [
+                { name: "Inexorable", type: "Universal", depth: 0.3, desc: "Impossible to stop or prevent; unyielding to entreaty." },
+                { name: "Suppliant", type: "Universal", depth: 0.2, desc: "A person making a humble plea to someone in power or authority." }
+            ],
+            idioms: [
+                { name: "Bathed in tears", type: "Contextual", depth: 0.6, desc: "Crying profusely; entirely overcome with visible grief." },
+                { name: "Silent as a Turk", type: "Lore", depth: 1.0, desc: "An archaic idiom denoting extreme reticence or quietness, reflecting 18th-century European perceptions." }
+            ]
+        },
+        "Yet do not suppose, because I ": {
+            entities: [],
+            words: [
+                { name: "Embarkation", type: "Universal", depth: 0.2, desc: "The process of boarding a ship; the act of beginning a voyage." }
+            ],
+            idioms: [
+                { name: "Fixed as fate", type: "Contextual", depth: 0.7, desc: "Unchangeable and inevitable — comparing resolution to cosmic determinism." }
+            ]
+        },
+        "I cannot describe to you my se": {
+            entities: [
+                { name: "Ancient Mariner", type: "Lore", depth: 1.0, desc: "Reference to Samuel Taylor Coleridge's poem, highlighting the peril and supernatural dread of sea voyages." }
+            ],
+            words: [
+                { name: "Allusion", type: "Universal", depth: 0.2, desc: "An expression designed to call something to mind without mentioning it explicitly." },
+                { name: "Perseverance", type: "Universal", depth: 0.15, desc: "Persistence in doing something despite difficulty or delay in achieving success." }
+            ],
+            idioms: [
+                { name: "Kill no albatross", type: "Lore", depth: 1.0, desc: "A promise not to bring a curse upon the voyage — directly referencing Coleridge's tale of fatal hubris at sea." }
+            ]
+        },
+        "But to return to dearer consid": {
+            entities: [
+                { name: "Africa", type: "Universal", depth: 0.15, desc: "The continent whose southern cape marks a possible return route." },
+                { name: "America", type: "Universal", depth: 0.15, desc: "The continent whose southern cape marks an alternative return route." }
+            ],
+            words: [
+                { name: "Traversed", type: "Universal", depth: 0.2, desc: "Traveled across or through; implies a complete crossing of a vast distance." }
+            ],
+            idioms: [
+                { name: "Reverse of the picture", type: "Contextual", depth: 0.6, desc: "The opposite or negative possible outcome — the dark underside of hope." }
+            ]
         }
+    };
 
-        /*
-         * Wraps individual sentences in span tags to allow tap-to-highlight functionality.
-         */
-        function wrapSentences() {
-            const atus = document.querySelectorAll('.atu');
-            atus.forEach(atu => {
-                const text = atu.innerHTML;
-                const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
-                atu.innerHTML = sentences.map(s => `<span class="sentence">${s.trim()}</span> `).join('');
-            });
-        }
-        // #endregion
+    let notesDb = {};
+    let currentAtu = null;
+    let editingNoteIdx = -1;
 
-        // #region Scroll Navigation
-        /*
-         * Scrolls the view to the previous ATU closest to the top of the viewport.
-         */
-        function scrollToPrevATU() {
-            const atus = Array.from(document.querySelectorAll('.atu'));
-            let target = atus[0];
-            for (let i = 0; i < atus.length; i++) {
-                if (atus[i].getBoundingClientRect().top > 50) {
-                    target = atus[Math.max(0, i - 1)];
-                    break;
-                }
-            }
-            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
+    // ─── COLOR UTILITIES ───────────────────────────────
 
-        /*
-         * Scrolls the view to the next ATU closest to the top of the viewport.
-         */
-        function scrollToNextATU() {
-            const atus = Array.from(document.querySelectorAll('.atu'));
-            let target = atus[atus.length - 1];
-            for (let i = 0; i < atus.length; i++) {
-                if (atus[i].getBoundingClientRect().top > 50) {
-                    target = atus[Math.min(atus.length - 1, i + 1)];
-                    break;
-                }
-            }
-            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-        // #endregion
+    function getColumnColors(type) {
+        if (type === 'entities') return { deep: '#1E3A5F', mid: '#4A7FB5', pale: '#D6E8F7', ghost: '#EBF3FA' };
+        if (type === 'words')    return { deep: '#5C4E00', mid: '#A89200', pale: '#F5EFD0', ghost: '#FAF7E8' };
+        return { deep: '#1B4332', mid: '#52796F', pale: '#D8F3DC', ghost: '#EDF6EE' };
+    }
 
-        // #region Event Handlers
-        let longPressTimer;
-        let isDragging = false;
-        let startY = 0;
-        let currentAtu = null;
+    function depthToCardBg(depth, type) {
+        const c = getColumnColors(type);
+        // depth 1.0 = dark (lore), 0.0 = light (universal)
+        const t = Math.max(0, Math.min(1, depth));
+        // Interpolate between pale and a deeper shade
+        if (t < 0.4) return c.ghost;
+        if (t < 0.7) return c.pale;
+        return mixColor(c.pale, c.deep, (t - 0.7) * 1.5);
+    }
 
-        /*
-         * Attaches pointer listeners for sentence tapping and ATU long-pressing.
-         * Prevents tap logic from firing if the user is dragging/scrolling.
-         */
-        function attachGestureListeners() {
-            const container = document.getElementById('aru-container');
+    function depthToTextColor(depth) {
+        const t = Math.max(0, Math.min(1, depth));
+        const v = Math.round(10 + (1 - t) * 60);
+        return `rgb(${v},${v},${v})`;
+    }
 
-            container.addEventListener('pointerdown', (e) => {
-                const atu = e.target.closest('.atu');
-                isDragging = false;
-                startY = e.clientY;
+    function mixColor(hex1, hex2, t) {
+        const parse = h => [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)];
+        const [r1,g1,b1] = parse(hex1);
+        const [r2,g2,b2] = parse(hex2);
+        const mix = (a,b) => Math.round(a + (b-a) * Math.max(0, Math.min(1, t)));
+        return `rgb(${mix(r1,r2)},${mix(g1,g2)},${mix(b1,b2)})`;
+    }
 
-                if (atu) {
-                    currentAtu = atu;
-                    longPressTimer = setTimeout(() => {
-                        if (!isDragging) openSidecar(atu);
-                    }, 600);
-                }
-            });
+    // ─── INITIALIZATION ────────────────────────────────
 
-            container.addEventListener('pointermove', (e) => {
-                if (Math.abs(e.clientY - startY) > 10) {
-                    isDragging = true;
-                    clearTimeout(longPressTimer);
-                }
-            });
+    function init() {
+        wrapSentences();
+        attachGestures();
+        buildProgressDots();
+        attachScrollListener();
+    }
 
-            container.addEventListener('pointerup', (e) => {
-                clearTimeout(longPressTimer);
-                if (!isDragging) {
-                    const sentence = e.target.closest('.sentence');
-                    if (sentence) {
-                        sentence.classList.toggle('highlight');
+    function wrapSentences() {
+        document.querySelectorAll('.atu').forEach(atu => {
+            if (atu.classList.contains('is-header') || atu.classList.contains('is-signature')) return;
+            const html = atu.innerHTML;
+            const sentences = html.match(/[^.!?]+[.!?"]+[\s]*/g) || [html];
+            atu.innerHTML = sentences.map(s =>
+                `<span class="sentence">${s}</span>`
+            ).join('');
+        });
+    }
+
+    // ─── PROGRESS DOTS ─────────────────────────────────
+
+    let progressTimer;
+
+    function buildProgressDots() {
+        const bar = document.getElementById('progress-bar');
+        const atus = document.querySelectorAll('.atu');
+        atus.forEach((_, i) => {
+            const dot = document.createElement('div');
+            dot.className = 'progress-dot';
+            bar.appendChild(dot);
+        });
+        updateProgressDots();
+    }
+
+    function updateProgressDots() {
+        const dots = document.querySelectorAll('.progress-dot');
+        const atus = document.querySelectorAll('.atu');
+        const vh = window.innerHeight;
+        atus.forEach((atu, i) => {
+            const rect = atu.getBoundingClientRect();
+            const visible = rect.top < vh * 0.7 && rect.bottom > vh * 0.2;
+            dots[i].classList.toggle('active', visible);
+        });
+    }
+
+    function attachScrollListener() {
+        let scrolling = false;
+        window.addEventListener('scroll', () => {
+            const bar = document.getElementById('progress-bar');
+            bar.classList.add('visible');
+            updateProgressDots();
+            clearTimeout(progressTimer);
+            progressTimer = setTimeout(() => {
+                bar.classList.remove('visible');
+            }, 1200);
+        }, { passive: true });
+    }
+
+    // ─── GESTURE HANDLING ──────────────────────────────
+
+    let longPressTimer;
+    let pressStartY = 0;
+    let isDragging = false;
+    let pullState = null; // 'top' or 'bottom'
+    let pullDistance = 0;
+    let wasAtTop = false;
+    let wasAtBottom = false;
+    const PULL_THRESHOLD = 80;
+
+    function isNearTop() {
+        return window.scrollY < 30;
+    }
+
+    function isNearBottom() {
+        const scrollHeight = Math.max(
+            document.body.scrollHeight,
+            document.documentElement.scrollHeight
+        );
+        return (window.innerHeight + window.scrollY) >= scrollHeight - 50;
+    }
+
+    function attachGestures() {
+        const surface = document.getElementById('reading-surface');
+
+        surface.addEventListener('pointerdown', e => {
+            isDragging = false;
+            pressStartY = e.clientY;
+            pullDistance = 0;
+            pullState = null;
+            // Snapshot scroll position at press time
+            wasAtTop = isNearTop();
+            wasAtBottom = isNearBottom();
+
+            const atu = e.target.closest('.atu');
+            if (atu && !atu.classList.contains('is-header') && !atu.classList.contains('is-signature')) {
+                currentAtu = atu;
+                const rect = atu.getBoundingClientRect();
+                atu.style.setProperty('--press-x', ((e.clientX - rect.left) / rect.width * 100) + '%');
+                atu.style.setProperty('--press-y', ((e.clientY - rect.top) / rect.height * 100) + '%');
+
+                longPressTimer = setTimeout(() => {
+                    if (!isDragging) {
+                        atu.classList.remove('pressing');
+                        openSidecar(atu);
                     }
-                }
-            });
+                }, 600);
 
-            container.addEventListener('pointercancel', () => {
+                setTimeout(() => {
+                    if (!isDragging) atu.classList.add('pressing');
+                }, 100);
+            }
+        });
+
+        surface.addEventListener('pointermove', e => {
+            const dy = e.clientY - pressStartY;
+            if (Math.abs(dy) > 10) {
+                isDragging = true;
                 clearTimeout(longPressTimer);
-                isDragging = false;
-            });
-        }
-
-        /*
-         * Closes all active overlays, returning to the text canvas.
-         */
-        function closeOverlays() {
-            document.querySelectorAll('.overlay').forEach(el => el.classList.remove('active'));
-        }
-
-        /*
-         * Opens the double-pull context UI.
-         */
-        function openContext() {
-            document.getElementById('context-ui').classList.add('active');
-        }
-
-        /*
-         * Opens the bottom-pull session close UI.
-         */
-        function openSessionClose() {
-            populateSessionClose();
-            document.getElementById('session-close').classList.add('active');
-        }
-        // #endregion
-
-        // #region Sidecar UI
-        /*
-         * Opens the Sidecar UI, injects the blurred header, and triggers Bento population.
-         */
-        function openSidecar(atu) {
-            const sidecar = document.getElementById('sidecar-ui');
-            const header = document.getElementById('sidecar-header');
-            header.innerText = atu.innerText;
-
-            populateBentoGrid(atu.innerText);
-            renderReflectionHub();
-            collapseToGrid();
-            sidecar.classList.add('active');
-        }
-
-        /*
-         * Closes the Sidecar UI.
-         */
-        function closeSidecar() {
-            document.getElementById('sidecar-ui').classList.remove('active');
-        }
-
-        /*
-         * Toggles the expanded accordion state for a specific Bento column.
-         */
-        function toggleColumn(colElement) {
-            const grid = document.getElementById('bento-grid');
-            const allCols = document.querySelectorAll('.bento-col');
-
-            if (colElement.classList.contains('expanded')) {
-                collapseToGrid();
-            } else {
-                grid.classList.add('accordion-mode');
-                allCols.forEach(c => c.classList.remove('expanded'));
-                colElement.classList.add('expanded');
-                document.getElementById('reflection-hub').style.display = 'none';
-                document.getElementById('sidecar-header').style.display = 'none';
-            }
-        }
-
-        /*
-         * Restores the Bento Grid to its default 3-column view.
-         */
-        function collapseToGrid() {
-            const grid = document.getElementById('bento-grid');
-            const allCols = document.querySelectorAll('.bento-col');
-            grid.classList.remove('accordion-mode');
-            allCols.forEach(c => c.classList.remove('expanded'));
-            document.getElementById('reflection-hub').style.display = 'block';
-            document.getElementById('sidecar-header').style.display = 'block';
-        }
-
-        /*
-         * Generates the HTML string for items inside a single Bento column.
-         */
-        function buildBentoItems(items) {
-            let html = '';
-            items.forEach(item => {
-                const label = item.name || item.word || item.phrase;
-                html += `<div class="bento-item" style="color: ${item.color}">${label}</div>`;
-                html += `<div class="card" style="background: ${item.bg}">
-                    <div class="card-title">${label}</div>
-                    <div class="card-desc"><strong>${item.type}:</strong> ${item.desc}</div>
-                 </div>`;
-            });
-            return html;
-        }
-
-        /*
-         * COMPLEX FUNCTION
-         * Extracts the current ATU key, fetches related data, and injects HTML into the Bento Grid.
-         * Steps:
-         * 1. Derives the lookup key from the first 30 characters of the ATU text.
-         * 2. Retrieves corresponding data from bentoDb (or uses an empty fallback).
-         * 3. Targets the column containers in the DOM.
-         * 4. Calls buildBentoItems to generate HTML and injects it alongside the headers.
-         */
-        function populateBentoGrid(atuText) {
-            const atuKey = atuText.substring(0, 30).trim();
-            const data = bentoDb[atuKey] || { entities: [], words: [], idioms: [] };
-
-            const colEntities = document.querySelector('.bento-col.entities');
-            const colWords = document.querySelector('.bento-col.words');
-            const colIdioms = document.querySelector('.bento-col.idioms');
-
-            colEntities.innerHTML = '<div class="bento-header">ENTITIES</div>' + buildBentoItems(data.entities);
-            colWords.innerHTML = '<div class="bento-header">WORDS</div>' + buildBentoItems(data.words);
-            colIdioms.innerHTML = '<div class="bento-header">IDIOMS</div>' + buildBentoItems(data.idioms);
-        }
-        // #endregion
-
-        // #region Notes UI
-        let editingNoteIndex = -1;
-
-        /*
-         * Renders the short list of notes specific to the active ATU.
-         */
-        function renderReflectionHub() {
-            const list = document.getElementById('reflection-list');
-            const atuKey = currentAtu ? currentAtu.innerText.substring(0, 30).trim() : 'global';
-            const notes = notesDb[atuKey] || [];
-
-            list.innerHTML = '';
-            notes.forEach((note, index) => {
-                const div = document.createElement('div');
-                div.className = 'reflection-item';
-                const snippet = note.length > 50 ? note.substring(0, 50) + '...' : note;
-                div.innerHTML = `<span>${snippet}</span> <div><span style="cursor:pointer; margin-right:5px;" onclick="openNotesMode(null, ${index})">[Edit]</span> <span style="cursor:pointer;" onclick="deleteNote(${index})">[Del]</span></div>`;
-                list.appendChild(div);
-            });
-        }
-
-        /*
-         * Opens the 40/30/30 Context-Sync writing workstation.
-         */
-        function openNotesMode(contextOverride = null, editIndex = -1) {
-            const notesUi = document.getElementById('notes-ui');
-            const topContext = document.getElementById('notes-context-text');
-            const history = document.getElementById('notes-history');
-            const input = document.getElementById('notes-input');
-
-            editingNoteIndex = editIndex;
-
-            if (contextOverride) {
-                topContext.innerText = contextOverride;
-                history.innerHTML = '';
-            } else if (currentAtu) {
-                topContext.innerText = currentAtu.innerText;
-                const atuKey = currentAtu.innerText.substring(0, 30).trim();
-                const notes = notesDb[atuKey] || [];
-                history.innerHTML = '<strong>Past Reflections:</strong><br>' + notes.map((n, i) => i !== editIndex ? `• ${n}` : '').filter(Boolean).join('<br>');
-                input.value = editIndex > -1 ? notes[editIndex] : '';
-            }
-            notesUi.classList.add('active');
-        }
-
-        /*
-         * Closes the Notes UI and clears the input.
-         */
-        function closeNotesMode() {
-            document.getElementById('notes-ui').classList.remove('active');
-            document.getElementById('notes-input').value = '';
-        }
-
-        /*
-         * Saves the contents of the Notes input to the active ATU's array.
-         */
-        function saveNote() {
-            const input = document.getElementById('notes-input');
-            const val = input.value.trim();
-            if (!val) { closeNotesMode(); return; }
-
-            const atuKey = currentAtu ? currentAtu.innerText.substring(0, 30).trim() : 'global';
-            if (!notesDb[atuKey]) notesDb[atuKey] = [];
-
-            if (editingNoteIndex > -1) {
-                notesDb[atuKey][editingNoteIndex] = val;
-            } else {
-                notesDb[atuKey].push(val);
+                document.querySelectorAll('.atu.pressing').forEach(a => a.classList.remove('pressing'));
             }
 
-            closeNotesMode();
-            renderReflectionHub();
-            populateSessionClose();
-        }
+            // Pull-to-reveal: use snapshotted position OR live position
+            const atTop = wasAtTop || isNearTop();
+            const atBottom = wasAtBottom || isNearBottom();
 
-        /*
-         * Deletes a note by index for the active ATU.
-         */
-        function deleteNote(index) {
-            const atuKey = currentAtu ? currentAtu.innerText.substring(0, 30).trim() : 'global';
-            if (notesDb[atuKey]) {
-                notesDb[atuKey].splice(index, 1);
-                renderReflectionHub();
+            if (atTop && dy > 20) {
+                pullState = 'top';
+                pullDistance = dy;
+                const indicator = document.getElementById('pull-indicator-top');
+                indicator.classList.add('visible');
+                indicator.classList.toggle('ready', dy > PULL_THRESHOLD);
+                document.getElementById('pull-top-text').textContent =
+                    dy > PULL_THRESHOLD ? 'Release for context' : 'Pull for context';
+            } else if (atBottom && dy < -20) {
+                pullState = 'bottom';
+                pullDistance = Math.abs(dy);
+                const indicator = document.getElementById('pull-indicator-bottom');
+                indicator.classList.add('visible');
+                indicator.classList.toggle('ready', pullDistance > PULL_THRESHOLD);
+                document.getElementById('pull-bottom-text').textContent =
+                    pullDistance > PULL_THRESHOLD ? 'Release to end session' : 'Pull to close session';
             }
-        }
+        });
 
-        /*
-         * Aggregates all session notes into the closing summary overlay.
-         */
-        function populateSessionClose() {
-            const list = document.getElementById('session-reflections-list');
-            list.innerHTML = '';
+        surface.addEventListener('pointerup', e => {
+            clearTimeout(longPressTimer);
+            document.querySelectorAll('.atu.pressing').forEach(a => a.classList.remove('pressing'));
 
-            let hasNotes = false;
-            for (const [key, notes] of Object.entries(notesDb)) {
-                if (notes.length > 0) {
-                    hasNotes = true;
-                    const block = document.createElement('div');
-                    block.style.marginBottom = '20px';
-                    block.innerHTML = `<strong>Context: ${key}...</strong><br>` + notes.map(n => `• ${n}`).join('<br>');
-                    list.appendChild(block);
+            // Handle pull gestures
+            if (pullState === 'top' && pullDistance > PULL_THRESHOLD) {
+                openOverlay('context-ui');
+            } else if (pullState === 'bottom' && pullDistance > PULL_THRESHOLD) {
+                populateSessionClose();
+                openOverlay('session-close');
+            }
+
+            document.getElementById('pull-indicator-top').classList.remove('visible', 'ready');
+            document.getElementById('pull-indicator-bottom').classList.remove('visible', 'ready');
+            pullState = null;
+            pullDistance = 0;
+            wasAtTop = false;
+            wasAtBottom = false;
+
+            // Sentence tap (only if not dragging and not long-press)
+            if (!isDragging) {
+                const sentence = e.target.closest('.sentence');
+                if (sentence) {
+                    sentence.classList.toggle('highlighted');
                 }
             }
-            if (!hasNotes) {
-                list.innerHTML = '<em>No reflections recorded during this session.</em><br><br>';
+        });
+
+        surface.addEventListener('pointercancel', () => {
+            clearTimeout(longPressTimer);
+            document.querySelectorAll('.atu.pressing').forEach(a => a.classList.remove('pressing'));
+            document.getElementById('pull-indicator-top').classList.remove('visible', 'ready');
+            document.getElementById('pull-indicator-bottom').classList.remove('visible', 'ready');
+            pullState = null;
+            wasAtTop = false;
+            wasAtBottom = false;
+        });
+
+        // Also listen on document level for touch gestures that escape the surface
+        document.addEventListener('touchmove', e => {
+            if (pullState) e.preventDefault();
+        }, { passive: false });
+    }
+
+    // ─── OVERLAY MANAGEMENT ────────────────────────────
+
+    function openOverlay(id) {
+        document.getElementById(id).classList.add('active');
+    }
+
+    function closeOverlay(id) {
+        document.getElementById(id).classList.remove('active');
+    }
+
+    // ─── SIDECAR ───────────────────────────────────────
+
+    function openSidecar(atu) {
+        currentAtu = atu;
+        const anchor = document.getElementById('sidecar-anchor');
+        // Show first ~4 lines of text
+        anchor.textContent = atu.textContent;
+        anchor.classList.remove('hidden');
+        document.getElementById('reflection-hub').classList.remove('hidden');
+
+        populateBentoGrid(atu.textContent);
+        renderReflections();
+        collapseGrid();
+        openOverlay('sidecar-ui');
+    }
+
+    function closeSidecar() {
+        closeOverlay('sidecar-ui');
+    }
+
+    function getAtuKey(text) {
+        return text.substring(0, 30).trim();
+    }
+
+    function populateBentoGrid(atuText) {
+        const key = getAtuKey(atuText);
+        const data = bentoDb[key] || { entities: [], words: [], idioms: [] };
+
+        buildColumn('.bento-col.entities', data.entities, 'entities');
+        buildColumn('.bento-col.words', data.words, 'words');
+        buildColumn('.bento-col.idioms', data.idioms, 'idioms');
+    }
+
+    function buildColumn(selector, items, type) {
+        const col = document.querySelector(selector);
+        const colors = getColumnColors(type);
+        const headerLabel = type.charAt(0).toUpperCase() + type.slice(1);
+
+        let html = `<div class="col-header">${headerLabel}</div>`;
+
+        if (items.length === 0) {
+            html += `<div class="ghost-cell">—</div>`;
+        } else {
+            // Sort by depth descending (dark/lore at top, light/universal at bottom)
+            const sorted = [...items].sort((a, b) => b.depth - a.depth);
+            sorted.forEach(item => {
+                const textColor = depthToTextColor(item.depth);
+                html += `<div class="headword" style="color:${textColor}">${item.name}</div>`;
+                const cardBg = depthToCardBg(item.depth, type);
+                html += `<div class="def-card" style="background:${cardBg}">
+                    <div class="card-headword">${item.name}</div>
+                    <div class="card-type">${item.type}</div>
+                    <div class="card-definition">${item.desc}</div>
+                </div>`;
+            });
+        }
+
+        col.innerHTML = html;
+    }
+
+    // ─── ACCORDION ─────────────────────────────────────
+
+    function expandColumn(colEl, event) {
+        const grid = document.getElementById('bento-grid');
+
+        if (grid.classList.contains('accordion') && colEl.classList.contains('expanded')) {
+            // Tap on expanded column → collapse back to hub
+            collapseGrid();
+            return;
+        }
+
+        if (grid.classList.contains('accordion') && !colEl.classList.contains('expanded')) {
+            // Direct slide: tap sidebar → swap
+            document.querySelectorAll('.bento-col').forEach(c => c.classList.remove('expanded'));
+            colEl.classList.add('expanded');
+            return;
+        }
+
+        // First expansion from hub
+        grid.classList.add('accordion');
+        document.querySelectorAll('.bento-col').forEach(c => c.classList.remove('expanded'));
+        colEl.classList.add('expanded');
+
+        // Hide reflection hub and anchor
+        document.getElementById('sidecar-anchor').classList.add('hidden');
+        document.getElementById('reflection-hub').classList.add('hidden');
+    }
+
+    function collapseGrid() {
+        const grid = document.getElementById('bento-grid');
+        grid.classList.remove('accordion');
+        document.querySelectorAll('.bento-col').forEach(c => c.classList.remove('expanded'));
+        document.getElementById('sidecar-anchor').classList.remove('hidden');
+        document.getElementById('reflection-hub').classList.remove('hidden');
+    }
+
+    // ─── REFLECTIONS ───────────────────────────────────
+
+    function renderReflections() {
+        const list = document.getElementById('reflection-list');
+        const key = currentAtu ? getAtuKey(currentAtu.textContent) : 'global';
+        const notes = notesDb[key] || [];
+
+        list.innerHTML = '';
+        notes.forEach((note, i) => {
+            const snippet = note.length > 60 ? note.substring(0, 60) + '…' : note;
+            const div = document.createElement('div');
+            div.className = 'reflection-entry';
+            div.innerHTML = `
+                <span class="reflection-text">"${snippet}"</span>
+                <div class="reflection-actions">
+                    <span onclick="openNotes(null, ${i})" title="Edit">Edit</span>
+                    <span onclick="deleteNote(${i})" title="Delete">Del</span>
+                </div>`;
+            list.appendChild(div);
+        });
+    }
+
+    // ─── NOTES WORKSTATION ─────────────────────────────
+
+    function openNotes(contextOverride, editIdx) {
+        sessionEditingKey = null;
+        sessionEditingIdx = -1;
+        editingNoteIdx = (editIdx !== undefined) ? editIdx : -1;
+        const sourceText = document.getElementById('notes-source-text');
+        const pastDiv = document.getElementById('notes-past-reflections');
+        const textarea = document.getElementById('notes-textarea');
+
+        if (contextOverride) {
+            sourceText.textContent = contextOverride;
+            pastDiv.innerHTML = '';
+        } else if (currentAtu) {
+            sourceText.textContent = currentAtu.textContent;
+            const key = getAtuKey(currentAtu.textContent);
+            const notes = notesDb[key] || [];
+            if (notes.length > 0) {
+                pastDiv.innerHTML = '<strong>Previous reflections:</strong><br>' +
+                    notes.filter((_, i) => i !== editingNoteIdx).map(n => `· ${n}`).join('<br>');
+            } else {
+                pastDiv.innerHTML = '';
+            }
+            textarea.value = editingNoteIdx > -1 ? (notes[editingNoteIdx] || '') : '';
+        }
+
+        openOverlay('notes-ui');
+        setTimeout(() => textarea.focus(), 400);
+    }
+
+    function closeNotes() {
+        closeOverlay('notes-ui');
+        document.getElementById('notes-textarea').value = '';
+        document.getElementById('notes-textarea').placeholder = 'What are you thinking...';
+        editingNoteIdx = -1;
+        sessionEditingKey = null;
+        sessionEditingIdx = -1;
+    }
+
+    function saveNote() {
+        const val = document.getElementById('notes-textarea').value.trim();
+        if (!val) { closeNotes(); return; }
+
+        // If saving from session close view
+        if (sessionEditingKey !== null) {
+            const key = sessionEditingKey;
+            if (!notesDb[key]) notesDb[key] = [];
+
+            if (sessionEditingIdx > -1) {
+                notesDb[key][sessionEditingIdx] = val;
+            } else {
+                notesDb[key].push(val);
+            }
+
+            sessionEditingKey = null;
+            sessionEditingIdx = -1;
+            closeNotes();
+            populateSessionReflections();
+            return;
+        }
+
+        // Normal ATU-level save from sidecar
+        const key = currentAtu ? getAtuKey(currentAtu.textContent) : 'global';
+        if (!notesDb[key]) notesDb[key] = [];
+
+        if (editingNoteIdx > -1) {
+            notesDb[key][editingNoteIdx] = val;
+        } else {
+            notesDb[key].push(val);
+        }
+
+        closeNotes();
+        renderReflections();
+    }
+
+    function deleteNote(idx) {
+        const key = currentAtu ? getAtuKey(currentAtu.textContent) : 'global';
+        if (notesDb[key]) {
+            notesDb[key].splice(idx, 1);
+            renderReflections();
+        }
+    }
+
+    // ─── SESSION CLOSE ─────────────────────────────────
+
+    let sessionEditingKey = null;
+    let sessionEditingIdx = -1;
+
+    function populateSessionClose() {
+        populateSessionAruViewer();
+        populateSessionReflections();
+    }
+
+    /*
+     * Populates the top zone with the full ARU text, each ATU as a tappable block.
+     */
+    function populateSessionAruViewer() {
+        const viewer = document.getElementById('session-aru-viewer');
+        viewer.innerHTML = '';
+        document.querySelectorAll('.atu').forEach((atu, i) => {
+            const div = document.createElement('div');
+            div.className = 'session-atu';
+            if (atu.classList.contains('is-header')) div.classList.add('is-header');
+            if (atu.classList.contains('is-signature')) div.classList.add('is-signature');
+            div.setAttribute('data-atu-index', i);
+            div.innerHTML = atu.innerHTML;
+            viewer.appendChild(div);
+        });
+    }
+
+    /*
+     * Scrolls the ARU viewer to a specific ATU and highlights it.
+     */
+    function scrollToSessionAtu(atuKey) {
+        const viewer = document.getElementById('session-aru-viewer');
+        const atus = document.querySelectorAll('.atu');
+
+        // Clear previous highlights
+        viewer.querySelectorAll('.session-atu').forEach(el => el.classList.remove('atu-highlighted'));
+
+        // Find matching ATU by key
+        let targetIndex = -1;
+        atus.forEach((atu, i) => {
+            if (getAtuKey(atu.textContent) === atuKey) targetIndex = i;
+        });
+
+        if (targetIndex >= 0) {
+            const targetEl = viewer.querySelector(`[data-atu-index="${targetIndex}"]`);
+            if (targetEl) {
+                targetEl.classList.add('atu-highlighted');
+                targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
         }
-        // #endregion
 
-        window.onload = initApp;
+        // Highlight the active ATU group in the reflection list
+        document.querySelectorAll('.session-atu-group').forEach(g => {
+            g.classList.toggle('active', g.getAttribute('data-atu-key') === atuKey);
+        });
+    }
+
+    /*
+     * Builds the structured reflection timeline:
+     * 1. ARU-level reflections (wide amber cards) at top
+     * 2. ATU-grouped reflections in reading order with paragraph snippets
+     */
+    function populateSessionReflections() {
+        const container = document.getElementById('session-reflections');
+        container.innerHTML = '';
+
+        const aruNotes = notesDb['__aru__'] || [];
+        const atus = document.querySelectorAll('.atu');
+
+        // 1. ARU-level reflections at top
+        aruNotes.forEach((note, i) => {
+            const card = document.createElement('div');
+            card.className = 'session-aru-card';
+            card.innerHTML = `
+                <div class="aru-card-label">Session Reflection</div>
+                <div class="aru-card-note">${note}</div>
+                <div class="aru-card-actions">
+                    <span onclick="editSessionNote('__aru__', ${i})">Edit</span>
+                    <span onclick="deleteSessionNote('__aru__', ${i})">Delete</span>
+                </div>`;
+            container.appendChild(card);
+        });
+
+        // 2. ATU-grouped reflections in reading order
+        let hasAtuNotes = false;
+        atus.forEach(atu => {
+            if (atu.classList.contains('is-header') || atu.classList.contains('is-signature')) return;
+            const key = getAtuKey(atu.textContent);
+            const notes = notesDb[key];
+            if (!notes || notes.length === 0) return;
+
+            hasAtuNotes = true;
+            const snippet = atu.textContent.substring(0, 80).trim() + '…';
+
+            const group = document.createElement('div');
+            group.className = 'session-atu-group';
+            group.setAttribute('data-atu-key', key);
+            group.onclick = (e) => {
+                // Only scroll if not clicking an action button
+                if (!e.target.closest('.session-atu-note-actions')) {
+                    scrollToSessionAtu(key);
+                }
+            };
+
+            let notesHtml = `<div class="session-atu-snippet">${snippet}</div>`;
+            notes.forEach((note, i) => {
+                notesHtml += `
+                    <div class="session-atu-note">
+                        <span class="session-atu-note-text">"${note}"</span>
+                        <div class="session-atu-note-actions">
+                            <span onclick="editSessionNote('${key}', ${i})">Edit</span>
+                            <span onclick="deleteSessionNote('${key}', ${i})">Del</span>
+                        </div>
+                    </div>`;
+            });
+
+            group.innerHTML = notesHtml;
+            container.appendChild(group);
+        });
+
+        if (aruNotes.length === 0 && !hasAtuNotes) {
+            container.innerHTML = '<div class="session-empty">No reflections recorded during this sitting.</div>';
+        }
+    }
+
+    /*
+     * Opens the notes workstation for an ARU-level reflection.
+     */
+    function openSessionNotes() {
+        sessionEditingKey = '__aru__';
+        sessionEditingIdx = -1;
+
+        const sourceText = document.getElementById('notes-source-text');
+        const pastDiv = document.getElementById('notes-past-reflections');
+        const textarea = document.getElementById('notes-textarea');
+
+        sourceText.textContent = 'Reflecting on the entire session…';
+        const existing = notesDb['__aru__'] || [];
+        if (existing.length > 0) {
+            pastDiv.innerHTML = '<strong>Previous session reflections:</strong><br>' +
+                existing.map(n => `· ${n}`).join('<br>');
+        } else {
+            pastDiv.innerHTML = '';
+        }
+        textarea.value = '';
+        textarea.placeholder = 'What did this sitting mean to you…';
+
+        openOverlay('notes-ui');
+        setTimeout(() => textarea.focus(), 400);
+    }
+
+    /*
+     * Opens the notes workstation to edit an existing note from session view.
+     */
+    function editSessionNote(key, idx) {
+        sessionEditingKey = key;
+        sessionEditingIdx = idx;
+
+        const sourceText = document.getElementById('notes-source-text');
+        const pastDiv = document.getElementById('notes-past-reflections');
+        const textarea = document.getElementById('notes-textarea');
+
+        if (key === '__aru__') {
+            sourceText.textContent = 'Reflecting on the entire session…';
+        } else {
+            // Find the source ATU text
+            const atus = document.querySelectorAll('.atu');
+            let sourceAtu = null;
+            atus.forEach(atu => {
+                if (getAtuKey(atu.textContent) === key) sourceAtu = atu;
+            });
+            sourceText.textContent = sourceAtu ? sourceAtu.textContent : key;
+        }
+
+        const notes = notesDb[key] || [];
+        pastDiv.innerHTML = '';
+        textarea.value = notes[idx] || '';
+        textarea.placeholder = 'Edit your reflection…';
+
+        openOverlay('notes-ui');
+        setTimeout(() => textarea.focus(), 400);
+    }
+
+    /*
+     * Deletes a note from session view and refreshes.
+     */
+    function deleteSessionNote(key, idx) {
+        if (notesDb[key]) {
+            notesDb[key].splice(idx, 1);
+            if (notesDb[key].length === 0 && key !== '__aru__') delete notesDb[key];
+            populateSessionReflections();
+        }
+    }
+
+    // ─── BOOT ──────────────────────────────────────────
+
+    window.onload = init;
     </script>
 </body>
 
