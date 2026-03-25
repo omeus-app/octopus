@@ -1,0 +1,1565 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Octopus Reading Engine — Inline Variant</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Inter:wght@300;400;500;600&display=swap');
+
+        :root {
+            --bg: #FAF8F5;
+            --ink: #1C1917;
+            --ink-soft: #57534E;
+            --ink-ghost: #A8A29E;
+            --highlight: rgba(180, 160, 120, 0.15);
+            --highlight-active: rgba(180, 160, 120, 0.28);
+            --rule: rgba(0, 0, 0, 0.06);
+
+            --blue-deep: #1E3A5F;
+            --blue-mid: #4A7FB5;
+            --blue-pale: #A8CCE8;
+            --blue-light: #D6E8F7;
+            --blue-ghost: #EBF3FA;
+
+            --yellow-deep: #5C4E00;
+            --yellow-mid: #A89200;
+            --yellow-pale: #D4C560;
+            --yellow-light: #F5EFD0;
+            --yellow-ghost: #FAF7E8;
+
+            --green-deep: #1B4332;
+            --green-mid: #52796F;
+            --green-pale: #95D5B2;
+            --green-light: #D8F3DC;
+            --green-ghost: #EDF6EE;
+
+            --amber: #C4A35A;
+            --amber-soft: #A08840;
+
+            --serif: 'Cormorant Garamond', 'Georgia', serif;
+            --sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+
+            --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+            --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        *, *::before, *::after {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            background: var(--bg);
+            color: var(--ink);
+            font-family: var(--serif);
+            font-size: 20px;
+            line-height: 1.75;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ═══════════════════════════════════════
+           ZERO-UI READING CANVAS
+           ═══════════════════════════════════════ */
+
+        #reading-surface {
+            position: relative;
+            min-height: 100vh;
+            touch-action: pan-y;
+        }
+
+        #aru-container {
+            padding: 15vh 32px 20vh 32px;
+            max-width: 620px;
+            margin: 0 auto;
+        }
+
+        .atu {
+            margin-bottom: 0;
+            text-indent: 0;
+            padding: 0.4em 0;
+            position: relative;
+            transition: filter 0.4s var(--ease-out-expo), opacity 0.4s var(--ease-out-expo);
+        }
+
+        .atu + .atu { text-indent: 1.8em; }
+        .atu.is-header { text-indent: 0; font-weight: 500; font-size: 0.95em; color: var(--ink-soft); }
+        .atu.is-signature { text-indent: 0; margin-top: 1.5em; }
+
+        .sentence {
+            cursor: pointer;
+            border-radius: 2px;
+            transition: background-color 0.25s ease;
+            padding: 1px 0;
+        }
+
+        .sentence:active { background-color: var(--highlight); }
+        .sentence.highlighted { background-color: var(--highlight); }
+
+        .atu.pressing {
+            background: radial-gradient(ellipse at var(--press-x, 50%) var(--press-y, 50%), rgba(0,0,0,0.03) 0%, transparent 70%);
+        }
+
+        /* ═══════════════════════════════════════
+           PULL INDICATORS
+           ═══════════════════════════════════════ */
+
+        #pull-indicator-top,
+        #pull-indicator-bottom {
+            position: fixed;
+            left: 0;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            z-index: 40;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            font-family: var(--sans);
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--ink-ghost);
+        }
+
+        #pull-indicator-top { top: 0; height: 60px; transform: translateY(-100%); }
+        #pull-indicator-bottom { bottom: 0; height: 60px; transform: translateY(100%); }
+
+        #pull-indicator-top.visible,
+        #pull-indicator-bottom.visible { opacity: 1; transform: translateY(0); }
+
+        #pull-indicator-top.ready,
+        #pull-indicator-bottom.ready { color: var(--ink-soft); }
+
+        /* ═══════════════════════════════════════
+           FULLSCREEN SIDECAR — 40 / 30 / 30
+           ═══════════════════════════════════════ */
+
+        #sidecar-overlay {
+            position: fixed;
+            top: 0;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100%;
+            max-width: 620px;
+            z-index: 200;
+            background: var(--bg);
+            display: none;
+            flex-direction: column;
+            opacity: 0;
+            transition: opacity 0.35s var(--ease-out-expo);
+        }
+
+        #sidecar-overlay.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        /* ─── Top 40%: Color-coded paragraph ─── */
+
+        #sidecar-source {
+            height: 40%;
+            overflow-y: auto;
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--rule);
+            position: relative;
+            scroll-behavior: smooth;
+        }
+
+        #sidecar-source-label {
+            font-family: var(--sans);
+            font-size: 9px;
+            font-weight: 600;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--ink-ghost);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        #sidecar-close {
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: 1.5px;
+            cursor: pointer;
+            padding: 4px 0;
+            transition: color 0.2s ease;
+        }
+
+        #sidecar-close:hover { color: var(--ink-soft); }
+
+        #sidecar-text {
+            font-family: var(--serif);
+            font-size: 18px;
+            line-height: 1.8;
+            color: var(--ink);
+        }
+
+        /* Legend */
+        .source-legend {
+            display: flex;
+            gap: 14px;
+            margin-top: 14px;
+            padding-top: 10px;
+            border-top: 1px solid var(--rule);
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-family: var(--sans);
+            font-size: 9px;
+            font-weight: 500;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+            color: var(--ink-ghost);
+        }
+
+        .legend-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 2px;
+        }
+
+        .legend-dot.entity { background: var(--blue-mid); }
+        .legend-dot.word { background: var(--yellow-mid); }
+        .legend-dot.idiom { background: var(--green-mid); }
+
+        /* Color-coded inline words */
+        .cw {
+            cursor: pointer;
+            border-radius: 3px;
+            padding: 0 3px;
+            margin: 0 -1px;
+            transition: all 0.2s ease;
+            text-decoration-style: dotted;
+            text-decoration-thickness: 1.5px;
+            text-underline-offset: 3px;
+        }
+
+        .cw:active { filter: brightness(0.88); }
+
+        .cw.selected {
+            filter: brightness(0.85);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+            transform: scale(1.02);
+        }
+
+        /* Entity */
+        .cw.t-entity.d-lore        { background: rgba(30,58,95,0.18); color: var(--blue-deep); text-decoration-color: var(--blue-deep); }
+        .cw.t-entity.d-contextual   { background: rgba(74,127,181,0.15); color: var(--blue-mid); text-decoration-color: var(--blue-mid); }
+        .cw.t-entity.d-universal    { background: rgba(214,232,247,0.5); color: var(--blue-deep); text-decoration-color: var(--blue-pale); }
+
+        /* Word */
+        .cw.t-word.d-lore           { background: rgba(92,78,0,0.15); color: var(--yellow-deep); text-decoration-color: var(--yellow-deep); }
+        .cw.t-word.d-contextual     { background: rgba(168,146,0,0.12); color: var(--yellow-mid); text-decoration-color: var(--yellow-mid); }
+        .cw.t-word.d-universal      { background: rgba(245,239,208,0.6); color: var(--yellow-deep); text-decoration-color: var(--yellow-pale); }
+
+        /* Idiom */
+        .cw.t-idiom.d-lore          { background: rgba(27,67,50,0.15); color: var(--green-deep); text-decoration-color: var(--green-deep); }
+        .cw.t-idiom.d-contextual    { background: rgba(82,121,111,0.12); color: var(--green-mid); text-decoration-color: var(--green-mid); }
+        .cw.t-idiom.d-universal     { background: rgba(216,243,220,0.6); color: var(--green-deep); text-decoration-color: var(--green-pale); }
+
+        /* ─── Middle 30%: Tabbed area ─── */
+
+        #sidecar-tabs-area {
+            height: 30%;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .tab-panels-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Tab bar */
+        .tab-bar {
+            display: flex;
+            flex-shrink: 0;
+            border-bottom: 1px solid var(--rule);
+            background: #FAFAF8;
+        }
+
+        .tab-btn {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 12px 8px;
+            cursor: pointer;
+            font-family: var(--sans);
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: var(--ink-ghost);
+            border-bottom: 2px solid transparent;
+            transition: color 0.25s ease, border-color 0.25s ease;
+            position: relative;
+        }
+
+        .tab-btn:hover { color: var(--ink-soft); }
+
+        .tab-btn.active {
+            color: var(--ink);
+            border-bottom-color: var(--ink);
+        }
+
+        .tab-btn svg {
+            width: 16px;
+            height: 16px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 1.8;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        /* Fade-back indicator */
+        .tab-btn .fade-ring {
+            position: absolute;
+            top: 6px;
+            right: 12px;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--amber);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .tab-btn .fade-ring.pulsing {
+            opacity: 1;
+            animation: subtlePulse 1.2s ease infinite;
+        }
+
+        @keyframes subtlePulse {
+            0%, 100% { opacity: 0.4; }
+            50% { opacity: 1; }
+        }
+
+        /* Tab panels — stacked absolutely, pure opacity crossfade */
+        .tab-panel {
+            position: absolute;
+            inset: 0;
+            overflow-y: auto;
+            padding: 16px 24px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.6s ease;
+        }
+
+        .tab-panel.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        /* ── Reflection panel ── */
+
+        .ref-note {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--rule);
+            font-family: var(--serif);
+            font-size: 14px;
+            line-height: 1.5;
+            color: var(--ink-soft);
+            font-style: italic;
+        }
+
+        .ref-note:last-of-type { border-bottom: none; }
+
+        .ref-note-text { flex: 1; }
+
+        .ref-note-actions {
+            flex-shrink: 0;
+            display: flex;
+            gap: 4px;
+        }
+
+        .ref-note-actions span {
+            font-family: var(--sans);
+            font-size: 10px;
+            color: var(--ink-ghost);
+            cursor: pointer;
+            padding: 2px 6px;
+            border-radius: 3px;
+            transition: color 0.2s ease, background 0.2s ease;
+        }
+
+        .ref-note-actions span:hover {
+            color: var(--ink);
+            background: var(--rule);
+        }
+
+        .ref-input-row {
+            display: flex;
+            gap: 8px;
+            align-items: flex-end;
+            margin-top: 8px;
+        }
+
+        .ref-textarea {
+            flex: 1;
+            background: rgba(0, 0, 0, 0.03);
+            border: 1px solid var(--rule);
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-family: var(--serif);
+            font-size: 15px;
+            line-height: 1.5;
+            color: var(--ink);
+            resize: none;
+            outline: none;
+            min-height: 40px;
+            max-height: 80px;
+            transition: border-color 0.2s ease;
+        }
+
+        .ref-textarea::placeholder {
+            color: var(--ink-ghost);
+            font-style: italic;
+        }
+
+        .ref-textarea:focus { border-color: var(--ink-ghost); }
+
+        .ref-save-btn {
+            background: var(--ink);
+            border: none;
+            color: var(--bg);
+            font-family: var(--sans);
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            padding: 10px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: opacity 0.15s ease, transform 0.15s ease;
+            white-space: nowrap;
+        }
+
+        .ref-save-btn:hover { opacity: 0.85; }
+        .ref-save-btn:active { transform: scale(0.96); }
+
+        /* ── Definition panel ── */
+
+        .def-empty {
+            font-family: var(--serif);
+            font-size: 15px;
+            font-style: italic;
+            color: var(--ink-ghost);
+            line-height: 1.7;
+            padding: 8px 0;
+        }
+
+        .def-content {
+            animation: fadeTab 0.3s ease forwards;
+        }
+
+        .def-word {
+            font-family: var(--sans);
+            font-weight: 600;
+            font-size: 17px;
+            color: var(--ink);
+            margin-bottom: 4px;
+        }
+
+        .def-type-badge {
+            display: inline-block;
+            font-family: var(--sans);
+            font-size: 9px;
+            font-weight: 600;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            padding: 3px 10px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+
+        .def-meaning {
+            font-family: var(--serif);
+            font-size: 16px;
+            line-height: 1.7;
+            color: var(--ink-soft);
+        }
+
+        /* Fade-back progress bar — subtle but visible */
+        .def-fade-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            height: 2px;
+            background: var(--ink-ghost);
+            width: 100%;
+            transform-origin: right;
+            transform: scaleX(1);
+            opacity: 0;
+            transition: opacity 0.4s ease;
+        }
+
+        .def-fade-bar.counting {
+            opacity: 0.5;
+            transform: scaleX(0);
+            transition: opacity 0.4s ease, transform 5s linear;
+        }
+
+        /* ── Intuition panel ── */
+
+        .intuition-placeholder {
+            font-family: var(--serif);
+            font-size: 15px;
+            font-style: italic;
+            color: var(--ink-ghost);
+            line-height: 1.7;
+            padding: 8px 0;
+        }
+
+        .intuition-content {
+            animation: fadeTab 0.4s ease forwards;
+        }
+
+        .intuition-label {
+            font-family: var(--sans);
+            font-size: 9px;
+            font-weight: 600;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--amber-soft);
+            margin-bottom: 10px;
+        }
+
+        .intuition-text {
+            font-family: var(--serif);
+            font-size: 16px;
+            line-height: 1.75;
+            color: var(--ink);
+        }
+
+        /* ─── Bottom 30%: Keyboard zone ─── */
+
+        #sidecar-keyboard {
+            height: 30%;
+            background: #E7E5E4;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: var(--sans);
+            font-size: 11px;
+            letter-spacing: 1px;
+            color: var(--ink-ghost);
+        }
+
+        /* ═══════════════════════════════════════
+           OVERLAYS — SHARED
+           ═══════════════════════════════════════ */
+
+        .overlay {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 100;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        .overlay.active { pointer-events: all; }
+
+        .overlay-backdrop {
+            position: absolute;
+            inset: 0;
+            background: var(--bg);
+            opacity: 0;
+            transition: opacity 0.4s var(--ease-out-expo);
+        }
+
+        .overlay.active .overlay-backdrop { opacity: 1; }
+
+        .overlay-content {
+            position: absolute;
+            inset: 0;
+            transform: translateY(20px);
+            opacity: 0;
+            transition: transform 0.5s var(--ease-out-expo), opacity 0.4s var(--ease-out-expo);
+        }
+
+        .overlay.active .overlay-content { transform: translateY(0); opacity: 1; }
+
+        /* Context UI */
+        #context-ui .overlay-content {
+            padding: 48px 28px; overflow-y: auto; max-width: 620px; margin: 0 auto;
+        }
+
+        .context-close {
+            font-family: var(--sans); font-size: 11px; font-weight: 500; letter-spacing: 1.5px;
+            text-transform: uppercase; color: var(--ink-ghost); cursor: pointer; display: inline-block;
+            margin-bottom: 40px; padding: 8px 0; border-bottom: 1px solid var(--rule); transition: color 0.2s ease;
+        }
+
+        .context-close:hover { color: var(--ink-soft); }
+
+        .context-section { margin-bottom: 48px; }
+        .context-section h2 {
+            font-family: var(--sans); font-size: 10px; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 3px; color: var(--ink-ghost); border-bottom: 1px solid var(--rule);
+            padding-bottom: 12px; margin-bottom: 20px;
+        }
+
+        .context-prose { font-family: var(--serif); font-size: 18px; line-height: 1.8; color: var(--ink-soft); }
+
+        .entity-list { list-style: none; padding: 0; margin: 20px 0 0 0; }
+        .entity-list li {
+            padding: 14px 0; border-bottom: 1px solid var(--rule); font-family: var(--sans);
+            font-size: 13px; line-height: 1.6; color: var(--ink-soft);
+        }
+        .entity-name { font-weight: 600; color: var(--ink); font-size: 14px; }
+        .entity-tag {
+            font-size: 9px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase;
+            padding: 2px 8px; border-radius: 3px; margin-left: 8px; vertical-align: middle;
+        }
+        .entity-tag.history { background: var(--blue-light); color: var(--blue-deep); }
+        .entity-tag.new { background: var(--green-light); color: var(--green-deep); }
+
+        /* Session Close */
+        #session-close .overlay-content { display: flex; flex-direction: column; height: 100%; }
+
+        #session-aru-viewer {
+            height: 50%; overflow-y: auto; padding: 28px 24px; border-bottom: 2px solid var(--rule);
+            font-family: var(--serif); font-size: 17px; line-height: 1.75; color: var(--ink-soft); scroll-behavior: smooth;
+        }
+
+        #session-aru-viewer .session-atu {
+            padding: 8px 4px; margin-bottom: 4px; border-radius: 4px;
+            transition: background-color 0.4s var(--ease-out-expo), box-shadow 0.4s var(--ease-out-expo);
+        }
+        #session-aru-viewer .session-atu + .session-atu { text-indent: 1.8em; }
+        #session-aru-viewer .session-atu.is-header { text-indent: 0; font-weight: 500; font-size: 0.92em; color: var(--ink-ghost); }
+        #session-aru-viewer .session-atu.is-signature { text-indent: 0; margin-top: 1em; }
+        #session-aru-viewer .session-atu.atu-highlighted { background: var(--highlight-active); box-shadow: inset 3px 0 0 var(--ink-soft); }
+
+        #session-reflections-zone {
+            height: 50%; overflow-y: auto; padding: 20px 24px; font-family: var(--sans);
+        }
+
+        .session-zone-header {
+            display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;
+        }
+        .session-zone-label { font-size: 9px; font-weight: 600; letter-spacing: 2.5px; text-transform: uppercase; color: var(--ink-ghost); }
+        .session-close-btn {
+            font-size: 11px; font-weight: 500; letter-spacing: 1px; text-transform: uppercase;
+            color: var(--ink-ghost); cursor: pointer; padding: 6px 0; transition: color 0.2s ease;
+        }
+        .session-close-btn:hover { color: var(--ink-soft); }
+
+        .session-aru-card {
+            margin-bottom: 16px; padding: 16px 20px; background: rgba(180,160,120,0.06);
+            border-radius: 8px; border-left: 4px solid var(--amber);
+        }
+        .session-aru-card .aru-card-label { font-size: 9px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--amber-soft); margin-bottom: 6px; }
+        .session-aru-card .aru-card-note { font-family: var(--serif); font-size: 16px; line-height: 1.6; color: var(--ink); }
+        .session-aru-card .aru-card-actions { display: flex; gap: 8px; margin-top: 8px; }
+        .session-aru-card .aru-card-actions span { font-size: 11px; color: var(--ink-ghost); cursor: pointer; transition: color 0.2s ease; }
+        .session-aru-card .aru-card-actions span:hover { color: var(--ink); }
+
+        .session-atu-group {
+            margin-bottom: 16px; padding: 14px 16px; background: rgba(0,0,0,0.02); border-radius: 8px;
+            border-left: 3px solid var(--rule); cursor: pointer; transition: background 0.2s ease, border-color 0.2s ease;
+        }
+        .session-atu-group:hover { background: rgba(0,0,0,0.04); border-left-color: var(--ink-ghost); }
+        .session-atu-group.active { border-left-color: var(--ink-soft); background: rgba(0,0,0,0.04); }
+
+        .session-atu-snippet {
+            font-family: var(--serif); font-size: 12px; line-height: 1.4; color: var(--ink-ghost);
+            margin-bottom: 10px; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+
+        .session-atu-note {
+            font-family: var(--serif); font-size: 15px; line-height: 1.55; color: var(--ink-soft);
+            padding: 4px 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
+        }
+        .session-atu-note + .session-atu-note { border-top: 1px solid var(--rule); margin-top: 4px; padding-top: 8px; }
+        .session-atu-note-text { flex: 1; }
+        .session-atu-note-actions { flex-shrink: 0; display: flex; gap: 4px; }
+        .session-atu-note-actions span {
+            font-family: var(--sans); font-size: 10px; color: var(--ink-ghost); cursor: pointer;
+            padding: 2px 4px; border-radius: 3px; transition: color 0.2s ease, background 0.2s ease;
+        }
+        .session-atu-note-actions span:hover { color: var(--ink); background: var(--rule); }
+
+        .session-empty { font-family: var(--serif); font-size: 16px; color: var(--ink-ghost); font-style: italic; padding: 20px 0; }
+
+        .session-add-aru {
+            display: inline-flex; align-items: center; gap: 6px; margin-top: 12px;
+            font-size: 12px; font-weight: 500; color: var(--amber-soft); cursor: pointer;
+            padding: 8px 0; transition: color 0.2s ease;
+        }
+        .session-add-aru:hover { color: #7A6830; }
+
+        /* Notes overlay (session-level) */
+        #notes-ui .overlay-content { display: flex; flex-direction: column; height: 100%; }
+
+        #notes-source {
+            height: 40%; padding: 24px; overflow-y: auto; border-bottom: 1px solid var(--rule);
+            font-family: var(--serif); font-size: 17px; line-height: 1.75; color: var(--ink-soft);
+        }
+        #notes-source .source-label {
+            font-family: var(--sans); font-size: 9px; font-weight: 600; letter-spacing: 2px;
+            text-transform: uppercase; color: var(--ink-ghost); margin-bottom: 14px;
+        }
+        #notes-source .past-reflections {
+            margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--rule);
+            font-family: var(--sans); font-size: 12px; line-height: 1.6; color: var(--ink-ghost);
+        }
+
+        #notes-input-area { height: 30%; background: #1C1917; display: flex; flex-direction: column; }
+
+        #notes-textarea {
+            flex: 1; width: 100%; background: transparent; border: none; color: #F5F5F0;
+            padding: 20px 24px; font-family: var(--serif); font-size: 17px; line-height: 1.65;
+            resize: none; outline: none;
+        }
+        #notes-textarea::placeholder { color: rgba(255,255,255,0.25); font-style: italic; }
+
+        .notes-toolbar { display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 8px 16px 12px; }
+        .notes-toolbar button {
+            font-family: var(--sans); font-size: 12px; font-weight: 500; padding: 6px 20px;
+            border: none; border-radius: 4px; cursor: pointer; transition: transform 0.15s ease;
+        }
+        .notes-toolbar button:active { transform: scale(0.96); }
+        .btn-save { background: #F5F5F0; color: #1C1917; }
+        .btn-cancel { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.6); }
+
+        #notes-keyboard {
+            height: 30%; background: #E7E5E4; display: flex; align-items: center; justify-content: center;
+            font-family: var(--sans); font-size: 11px; letter-spacing: 1px; color: var(--ink-ghost);
+        }
+
+        /* ═══════════════════════════════════════
+           PROGRESS DOTS
+           ═══════════════════════════════════════ */
+
+        #progress-bar {
+            position: fixed; right: 8px; top: 50%; transform: translateY(-50%);
+            display: flex; flex-direction: column; gap: 3px; opacity: 0;
+            transition: opacity 0.6s ease; z-index: 30; pointer-events: none;
+        }
+        #progress-bar.visible { opacity: 1; }
+        .progress-dot { width: 3px; height: 3px; border-radius: 50%; background: var(--ink-ghost); transition: background 0.3s ease, transform 0.3s ease; }
+        .progress-dot.active { background: var(--ink-soft); transform: scale(1.5); }
+
+        ::-webkit-scrollbar { width: 0; background: transparent; }
+        ::selection { background: rgba(180, 160, 120, 0.3); }
+    </style>
+</head>
+
+<body>
+
+    <div id="pull-indicator-top"><span id="pull-top-text">Pull for context</span></div>
+    <div id="pull-indicator-bottom"><span id="pull-bottom-text">Pull to close session</span></div>
+    <div id="progress-bar"></div>
+
+    <!-- ═══ READING SURFACE ═══ -->
+    <div id="reading-surface">
+        <div id="aru-container">
+            <p class="atu is-header" data-end-score="0">Letter 2</p>
+            <p class="atu is-header" data-end-score="0">To Mrs. Saville, England.</p>
+            <p class="atu is-header" data-end-score="0">Archangel, 28th March, 17—.</p>
+            <p class="atu" data-end-score="35">How slowly the time passes here, encompassed as I am by frost and snow! Yet a second step is taken towards my enterprise. I have hired a vessel and am occupied in collecting my sailors; those whom I have already engaged appear to be men on whom I can depend and are certainly possessed of dauntless courage.</p>
+            <p class="atu" data-end-score="55">But I have one want which I have never yet been able to satisfy, and the absence of the object of which I now feel as a most severe evil, I have no friend, Margaret: when I am glowing with the enthusiasm of success, there will be none to participate my joy; if I am assailed by disappointment, no one will endeavour to sustain me in dejection. I shall commit my thoughts to paper, it is true; but that is a poor medium for the communication of feeling. I desire the company of a man who could sympathise with me, whose eyes would reply to mine. You may deem me romantic, my dear sister, but I bitterly feel the want of a friend. I have no one near me, gentle yet courageous, possessed of a cultivated as well as of a capacious mind, whose tastes are like my own, to approve or amend my plans. How would such a friend repair the faults of your poor brother! I am too ardent in execution and too impatient of difficulties. But it is a still greater evil to me that I am self-educated: for the first fourteen years of my life I ran wild on a common and read nothing but our Uncle Thomas' books of voyages. At that age I became acquainted with the celebrated poets of our own country; but it was only when it had ceased to be in my power to derive its most important benefits from such a conviction that I perceived the necessity of becoming acquainted with more languages than that of my native country. Now I am twenty-eight and am in reality more illiterate than many schoolboys of fifteen. It is true that I have thought more and that my daydreams are more extended and magnificent, but they want (as the painters call it) keeping; and I greatly need a friend who would have sense enough not to despise me as romantic, and affection enough for me to endeavour to regulate my mind.</p>
+            <p class="atu" data-end-score="60">Well, these are useless complaints; I shall certainly find no friend on the wide ocean, nor even here in Archangel, among merchants and seamen. Yet some feelings, unallied to the dross of human nature, beat even in these rugged bosoms. My lieutenant, for instance, is a man of wonderful courage and enterprise; he is madly desirous of glory, or rather, to word my phrase more characteristically, of advancement in his profession. He is an Englishman, and in the midst of national and professional prejudices, unsoftened by cultivation, retains some of the noblest endowments of humanity. I first became acquainted with him on board a whale vessel; finding that he was unemployed in this city, I easily engaged him to assist in my enterprise.</p>
+            <p class="atu" data-end-score="70">The master is a person of an excellent disposition and is remarkable in the ship for his gentleness and the mildness of his discipline. This circumstance, added to his well-known integrity and dauntless courage, made me very desirous to engage him. A youth passed in solitude, my best years spent under your gentle and feminine fosterage, has so refined the groundwork of my character that I cannot overcome an intense distaste to the usual brutality exercised on board ship: I have never believed it to be necessary, and when I heard of a mariner equally noted for his kindliness of heart and the respect and obedience paid to him by his crew, I felt myself peculiarly fortunate in being able to secure his services. I heard of him first in rather a romantic manner, from a lady who owes to him the happiness of her life. This, briefly, is his story. Some years ago he loved a young Russian lady of moderate fortune, and having amassed a considerable sum in prize-money, the father of the girl consented to the match. He saw his mistress once before the destined ceremony; but she was bathed in tears, and throwing herself at his feet, entreated him to spare her, confessing at the same time that she loved another, but that he was poor, and that her father would never consent to the union. My generous friend reassured the suppliant, and on being informed of the name of her lover, instantly abandoned his pursuit. He had already bought a farm with his money, on which he had designed to pass the remainder of his life; but he bestowed the whole on his rival, together with the remains of his prize-money to purchase stock, and then himself solicited the young woman's father to consent to her marriage with her lover. But the old man decidedly refused, thinking himself bound in honour to my friend, who, when he found the father inexorable, quitted his country, nor returned until he heard that his former mistress was married according to her inclinations. "What a noble fellow!" you will exclaim. He is so; but then he is wholly uneducated: he is as silent as a Turk, and a kind of ignorant carelessness attends him, which, while it renders his conduct the more astonishing, detracts from the interest and sympathy which otherwise he would command.</p>
+            <p class="atu" data-end-score="45">Yet do not suppose, because I complain a little or because I can conceive a consolation for my toils which I may never know, that I am wavering in my resolutions. Those are as fixed as fate, and my voyage is only now delayed until the weather shall permit my embarkation. The winter has been dreadfully severe, but the spring promises well, and it is considered as a remarkably early season, so that perhaps I may sail sooner than I expected. I shall do nothing rashly: you know me sufficiently to confide in my prudence and considerateness whenever the safety of others is committed to my care.</p>
+            <p class="atu" data-end-score="80">I cannot describe to you my sensations on the near prospect of my undertaking. It is impossible to communicate to you a conception of the trembling sensation, half pleasurable and half fearful, with which I am preparing to depart. I am going to unexplored regions, to "the land of mist and snow," but I shall kill no albatross; therefore do not be alarmed for my safety or if I should come back to you as worn and woeful as the "Ancient Mariner." You will smile at my allusion, but I will disclose a secret. I have often attributed my attachment to, my passionate enthusiasm for, the dangerous mysteries of ocean to that production of the most imaginative of modern poets. There is something at work in my soul which I do not understand. I am practically industrious—painstaking, a workman to execute with perseverance and labour—but besides this there is a love for the marvellous, a belief in the marvellous, intertwined in all my projects, which hurries me out of the common pathways of men, even to the wild sea and unvisited regions I am about to explore.</p>
+            <p class="atu" data-end-score="90">But to return to dearer considerations. Shall I meet you again, after having traversed immense seas, and returned by the most southern cape of Africa or America? I dare not expect such success, yet I cannot bear to look on the reverse of the picture. Continue for the present to write to me by every opportunity: I may receive your letters on some occasions when I need them most to support my spirits. I love you very tenderly. Remember me with affection, should you never hear from me again.</p>
+            <p class="atu is-signature" data-end-score="100">Your affectionate brother,<br>Robert Walton</p>
+        </div>
+    </div>
+
+    <!-- ═══ FULLSCREEN SIDECAR ═══ -->
+    <div id="sidecar-overlay">
+        <!-- Top 40%: Scrollable color-coded paragraph -->
+        <div id="sidecar-source">
+            <div id="sidecar-source-label">
+                <span>Source Paragraph</span>
+                <span id="sidecar-close" onclick="closeSidecar()">Return</span>
+            </div>
+            <div id="sidecar-text"></div>
+            <div class="source-legend">
+                <div class="legend-item"><span class="legend-dot entity"></span>Entity</div>
+                <div class="legend-item"><span class="legend-dot word"></span>Word</div>
+                <div class="legend-item"><span class="legend-dot idiom"></span>Idiom</div>
+            </div>
+        </div>
+
+        <!-- Middle 30%: Tabbed area -->
+        <div id="sidecar-tabs-area">
+            <div class="tab-bar">
+                <div class="tab-btn active" data-tab="reflection" onclick="switchTab('reflection')">
+                    <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                    Reflect
+                    <span class="fade-ring" id="reflect-fade-ring"></span>
+                </div>
+                <div class="tab-btn" data-tab="definition" onclick="switchTab('definition')">
+                    <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                    Define
+                </div>
+                <div class="tab-btn" data-tab="intuition" onclick="switchTab('intuition')">
+                    <svg viewBox="0 0 24 24"><line x1="9" y1="18" x2="15" y2="18"/><line x1="10" y1="22" x2="14" y2="22"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg>
+                    Intuit
+                </div>
+            </div>
+
+            <div class="tab-panels-container">
+                <!-- Reflection Panel -->
+                <div class="tab-panel active" id="panel-reflection">
+                    <div id="ref-notes-list"></div>
+                    <div class="ref-input-row">
+                        <textarea class="ref-textarea" id="ref-textarea" placeholder="What are you thinking…" rows="1"></textarea>
+                        <button class="ref-save-btn" onclick="saveReflection()">Save</button>
+                    </div>
+                </div>
+
+                <!-- Definition Panel -->
+                <div class="tab-panel" id="panel-definition">
+                    <div id="def-content">
+                        <div class="def-empty">Tap a highlighted word above to see its meaning</div>
+                    </div>
+                    <div class="def-fade-bar" id="def-fade-bar"></div>
+                </div>
+
+                <!-- Intuition Panel -->
+                <div class="tab-panel" id="panel-intuition">
+                    <div id="intuition-content">
+                        <div class="intuition-placeholder">Tap to receive a reading guide for this paragraph</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom 30%: Keyboard -->
+        <div id="sidecar-keyboard">System Keyboard</div>
+    </div>
+
+    <!-- ═══ CONTEXT OVERLAY (Top Pull) ═══ -->
+    <div id="context-ui" class="overlay">
+        <div class="overlay-backdrop"></div>
+        <div class="overlay-content">
+            <span class="context-close" onclick="closeOverlay('context-ui')">Return to reading</span>
+            <div class="context-section">
+                <h2>Session Context</h2>
+                <p class="context-prose">Walton has successfully reached Archangel and is executing his plan to hire a vessel and crew for the polar expedition. He is battling feelings of severe isolation as he prepares for departure.</p>
+                <h2 style="margin-top:36px">Entities Encountered</h2>
+                <ul class="entity-list">
+                    <li><span class="entity-name">Robert Walton</span><span class="entity-tag history">History</span><br>Captain of the expedition.</li>
+                    <li><span class="entity-name">Mrs. Saville / Margaret</span><span class="entity-tag history">History</span><br>Walton's sister in England.</li>
+                    <li><span class="entity-name">Archangel</span><span class="entity-tag history">History</span><br>The Russian port city.</li>
+                    <li><span class="entity-name">Uncle Thomas</span><span class="entity-tag history">History</span><br>Walton's uncle whose library fueled his passions.</li>
+                    <li><span class="entity-name">The Lieutenant</span><span class="entity-tag new">New</span><br>An ambitious English officer hired for the voyage.</li>
+                    <li><span class="entity-name">The Master</span><span class="entity-tag new">New</span><br>A gentle ship master with a tragic romantic past.</li>
+                </ul>
+            </div>
+            <div class="context-section">
+                <h2>Global Context — The Story So Far</h2>
+                <p class="context-prose">Robert Walton, an ambitious explorer, has set out on a perilous journey to the North Pole. After years of preparation and a failed attempt at poetry, he arrived in St. Petersburgh, then departed for Archangel to secure a ship and crew.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ SESSION CLOSE (Bottom Pull) ═══ -->
+    <div id="session-close" class="overlay">
+        <div class="overlay-backdrop"></div>
+        <div class="overlay-content">
+            <div id="session-aru-viewer"></div>
+            <div id="session-reflections-zone">
+                <div class="session-zone-header">
+                    <span class="session-zone-label">Your Path Through This Sitting</span>
+                    <span class="session-close-btn" onclick="closeOverlay('session-close')">Resume</span>
+                </div>
+                <div id="session-reflections"></div>
+                <div class="session-add-aru" onclick="openSessionNotes()">+ Add session reflection</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ NOTES OVERLAY (session-level) ═══ -->
+    <div id="notes-ui" class="overlay">
+        <div class="overlay-backdrop"></div>
+        <div class="overlay-content">
+            <div id="notes-source">
+                <div class="source-label">Source</div>
+                <div id="notes-source-text"></div>
+                <div id="notes-past-reflections" class="past-reflections"></div>
+            </div>
+            <div id="notes-input-area">
+                <textarea id="notes-textarea" placeholder="What are you thinking..."></textarea>
+                <div class="notes-toolbar">
+                    <button class="btn-cancel" onclick="closeNotes()">Cancel</button>
+                    <button class="btn-save" onclick="saveSessionNote()">Save</button>
+                </div>
+            </div>
+            <div id="notes-keyboard">System Keyboard</div>
+        </div>
+    </div>
+
+    <script>
+    /* ═══════════════════════════════════════════════════════
+       OCTOPUS READING ENGINE — INLINE VARIANT v2
+       Fullscreen 40/30/30 with tabbed Definition/Reflection/Intuition
+       ═══════════════════════════════════════════════════════ */
+
+    // ─── KNOWLEDGE DATABASE ──────────────────────────────
+
+    const knowledgeDb = {
+        "How slowly the time passes her": {
+            items: [
+                { name: "Encompassed", column: "word", type: "Universal", depth: 0.3, desc: "Surrounded and have or hold within.", phrases: ["encompassed"] },
+                { name: "Dauntless", column: "word", type: "Universal", depth: 0.2, desc: "Showing fearlessness and determination.", phrases: ["dauntless"] },
+                { name: "Encompassed by frost and snow", column: "idiom", type: "Contextual", depth: 0.7, desc: "Surrounded completely by the harsh winter environment, emphasizing Walton's physical and psychological isolation.", phrases: ["encompassed as I am by frost and snow"] }
+            ],
+            intuition: "This paragraph sets the emotional baseline for the letter. Notice the contrast between physical stasis ('frost and snow', 'slowly') and forward motion ('second step', 'enterprise'). Walton is stuck in place but mentally racing ahead. Pay attention to how he frames his crew — he values courage above all, which foreshadows the risks he's willing to impose on others for his ambition."
+        },
+        "But I have one want which I ha": {
+            items: [
+                { name: "Margaret", column: "entity", type: "History", depth: 0.9, desc: "Walton's sister, also addressed as Mrs. Saville.", phrases: ["Margaret"] },
+                { name: "Uncle Thomas", column: "entity", type: "Lore", depth: 1.0, desc: "Owner of the books of voyages that educated young Walton.", phrases: ["Uncle Thomas"] },
+                { name: "Capacious", column: "word", type: "Universal", depth: 0.2, desc: "Having a lot of space inside; roomy. Here describing the ideal friend's mind.", phrases: ["capacious"] },
+                { name: "Ardent", column: "word", type: "Universal", depth: 0.2, desc: "Enthusiastic or passionate. Walton's self-diagnosis of his own temperament.", phrases: ["ardent"] },
+                { name: "Ran wild on a common", column: "idiom", type: "Contextual", depth: 0.8, desc: "Growing up without formal constraints or disciplined education, roaming the shared public land.", phrases: ["ran wild on a common"] },
+                { name: "Want… keeping", column: "idiom", type: "Lore", depth: 1.0, desc: "A painter's term meaning a lack of proper balance, tonal harmony, or coherence in a composition.", phrases: ["want (as the painters call it) keeping"] }
+            ],
+            intuition: "This is Walton's confession of inadequacy — the key to understanding his character. He craves a friend who is his intellectual superior. Track the self-contradictions: he calls himself 'illiterate' while composing deeply articulate prose. The painter's metaphor ('keeping') reveals his real fear: not ignorance, but a lack of internal coherence. He doesn't need a teacher — he needs a mirror. This exact loneliness makes him vulnerable to Victor Frankenstein."
+        },
+        "Well, these are useless compla": {
+            items: [
+                { name: "The Lieutenant", column: "entity", type: "New", depth: 0.9, desc: "An ambitious, unrefined, but noble English officer hired for the voyage.", phrases: ["lieutenant"] },
+                { name: "Dross", column: "word", type: "Universal", depth: 0.3, desc: "Something regarded as worthless; rubbish. Originally a metallurgical term for impurities.", phrases: ["dross"] },
+                { name: "Unallied", column: "word", type: "Universal", depth: 0.2, desc: "Not allied or connected to; standing apart from.", phrases: ["unallied"] },
+                { name: "Dross of human nature", column: "idiom", type: "Contextual", depth: 0.7, desc: "The base, worthless aspects of humanity — the impurities that remain when noble qualities are refined away.", phrases: ["dross of human nature"] }
+            ],
+            intuition: "Walton shifts from self-pity to observation. He's testing whether 'noble feelings' can exist in 'rugged bosoms' — uneducated people. Notice his class bias: the lieutenant is praised but kept at arm's length because he lacks 'cultivation'. Shelley is showing us Walton's blind spot: he values intellect over character, refinement over substance. This will matter when he meets Victor."
+        },
+        "The master is a person of an e": {
+            items: [
+                { name: "The Master", column: "entity", type: "New", depth: 0.9, desc: "A remarkably gentle ship captain with a tragic romantic past involving a Russian lady.", phrases: ["master"] },
+                { name: "Inexorable", column: "word", type: "Universal", depth: 0.3, desc: "Impossible to stop or prevent; unyielding to entreaty.", phrases: ["inexorable"] },
+                { name: "Suppliant", column: "word", type: "Universal", depth: 0.2, desc: "A person making a humble plea to someone in power or authority.", phrases: ["suppliant"] },
+                { name: "Bathed in tears", column: "idiom", type: "Contextual", depth: 0.6, desc: "Crying profusely; entirely overcome with visible grief.", phrases: ["bathed in tears"] },
+                { name: "Silent as a Turk", column: "idiom", type: "Lore", depth: 1.0, desc: "An archaic idiom denoting extreme reticence or quietness, reflecting 18th-century European perceptions.", phrases: ["silent as a Turk"] }
+            ],
+            intuition: "This paragraph is a story-within-a-story — the Master's romantic sacrifice. It's the longest paragraph in the letter and the most emotionally complex. Ask yourself: why does Walton tell this story in such detail? Because it's his fantasy — selfless love, noble sacrifice, the admiration of others. But notice the sting in the tail: the Master is 'wholly uneducated' and 'silent', so despite his nobility, Walton still can't see him as a friend. The moral: Walton admires virtue but requires eloquence."
+        },
+        "Yet do not suppose, because I ": {
+            items: [
+                { name: "Embarkation", column: "word", type: "Universal", depth: 0.2, desc: "The process of boarding a ship; the act of beginning a voyage.", phrases: ["embarkation"] },
+                { name: "Fixed as fate", column: "idiom", type: "Contextual", depth: 0.7, desc: "Unchangeable and inevitable — comparing resolution to cosmic determinism.", phrases: ["fixed as fate"] }
+            ],
+            intuition: "After vulnerability, Walton snaps back to certainty. 'Fixed as fate' is hubris disguised as conviction. He's reassuring Margaret — but also reassuring himself. Notice the shift: in the previous paragraphs he was emotionally open; now he's armored again. Read 'I shall do nothing rashly' as a promise he will break."
+        },
+        "I cannot describe to you my se": {
+            items: [
+                { name: "Ancient Mariner", column: "entity", type: "Lore", depth: 1.0, desc: "Reference to Samuel Taylor Coleridge's poem, highlighting the peril and supernatural dread of sea voyages.", phrases: ["Ancient Mariner"] },
+                { name: "Allusion", column: "word", type: "Universal", depth: 0.2, desc: "An expression designed to call something to mind without mentioning it explicitly.", phrases: ["allusion"] },
+                { name: "Perseverance", column: "word", type: "Universal", depth: 0.15, desc: "Persistence in doing something despite difficulty or delay in achieving success.", phrases: ["perseverance"] },
+                { name: "Kill no albatross", column: "idiom", type: "Lore", depth: 1.0, desc: "A promise not to bring a curse upon the voyage — directly referencing Coleridge's tale of fatal hubris at sea.", phrases: ["kill no albatross"] }
+            ],
+            intuition: "The literary reference to the Ancient Mariner is not decorative — it's prophetic. Coleridge's mariner killed an innocent creature and cursed his entire crew. Walton jokes he'll 'kill no albatross', but Shelley is signaling to the reader: this man is walking into exactly that kind of story. The 'trembling sensation, half pleasurable and half fearful' perfectly describes the experience of reading Frankenstein itself."
+        },
+        "But to return to dearer consid": {
+            items: [
+                { name: "Africa", column: "entity", type: "Universal", depth: 0.15, desc: "The continent whose southern cape marks a possible return route.", phrases: ["Africa"] },
+                { name: "America", column: "entity", type: "Universal", depth: 0.15, desc: "The continent whose southern cape marks an alternative return route.", phrases: ["America"] },
+                { name: "Traversed", column: "word", type: "Universal", depth: 0.2, desc: "Traveled across or through; implies a complete crossing of a vast distance.", phrases: ["traversed"] },
+                { name: "Reverse of the picture", column: "idiom", type: "Contextual", depth: 0.6, desc: "The opposite or negative possible outcome — the dark underside of hope.", phrases: ["reverse of the picture"] }
+            ],
+            intuition: "The closing paragraph is pure emotional manipulation — Walton is a skilled writer despite calling himself 'illiterate'. 'Remember me with affection, should you never hear from me again' is designed to make Margaret (and the reader) fear for him. He's romanticizing his own potential death. This is the voice of someone who would rather die gloriously than live ordinarily."
+        }
+    };
+
+    let notesDb = {};
+    let currentAtu = null;
+    let activeTab = 'reflection';
+    let fadeBackTimer = null;
+    let fadeBarAnimTimer = null;
+    let hadReflectionText = false;
+
+    function getAtuKey(text) { return text.substring(0, 30).trim(); }
+
+    function depthClass(d) {
+        if (d >= 0.8) return 'd-lore';
+        if (d >= 0.5) return 'd-contextual';
+        return 'd-universal';
+    }
+
+    function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+    // ─── INITIALIZATION ──────────────────────────────────
+
+    function init() {
+        wrapSentences();
+        attachGestures();
+        buildProgressDots();
+        attachScrollListener();
+    }
+
+    function wrapSentences() {
+        document.querySelectorAll('.atu').forEach(atu => {
+            if (atu.classList.contains('is-header') || atu.classList.contains('is-signature')) return;
+            const html = atu.innerHTML;
+            const sentences = html.match(/[^.!?]+[.!?"]+[\s]*/g) || [html];
+            atu.innerHTML = sentences.map(s => `<span class="sentence">${s}</span>`).join('');
+        });
+    }
+
+    // ─── PROGRESS DOTS ───────────────────────────────────
+
+    let progressTimer;
+    function buildProgressDots() {
+        const bar = document.getElementById('progress-bar');
+        document.querySelectorAll('.atu').forEach(() => {
+            const d = document.createElement('div');
+            d.className = 'progress-dot';
+            bar.appendChild(d);
+        });
+        updateProgressDots();
+    }
+
+    function updateProgressDots() {
+        const dots = document.querySelectorAll('.progress-dot');
+        const atus = document.querySelectorAll('.atu');
+        const vh = window.innerHeight;
+        atus.forEach((atu, i) => {
+            const r = atu.getBoundingClientRect();
+            dots[i].classList.toggle('active', r.top < vh * 0.7 && r.bottom > vh * 0.2);
+        });
+    }
+
+    function attachScrollListener() {
+        window.addEventListener('scroll', () => {
+            document.getElementById('progress-bar').classList.add('visible');
+            updateProgressDots();
+            clearTimeout(progressTimer);
+            progressTimer = setTimeout(() => document.getElementById('progress-bar').classList.remove('visible'), 1200);
+        }, { passive: true });
+    }
+
+    // ─── GESTURE HANDLING ────────────────────────────────
+
+    let longPressTimer;
+    let pressStartY = 0;
+    let isDragging = false;
+    let pullState = null;
+    let pullDistance = 0;
+    let wasAtTop = false;
+    let wasAtBottom = false;
+    const PULL_THRESHOLD = 80;
+
+    function isNearTop() { return window.scrollY < 30; }
+    function isNearBottom() {
+        return (window.innerHeight + window.scrollY) >= Math.max(document.body.scrollHeight, document.documentElement.scrollHeight) - 50;
+    }
+
+    function attachGestures() {
+        const surface = document.getElementById('reading-surface');
+
+        surface.addEventListener('pointerdown', e => {
+            isDragging = false;
+            pressStartY = e.clientY;
+            pullDistance = 0;
+            pullState = null;
+            wasAtTop = isNearTop();
+            wasAtBottom = isNearBottom();
+
+            const atu = e.target.closest('.atu');
+            if (atu && !atu.classList.contains('is-header') && !atu.classList.contains('is-signature')) {
+                currentAtu = atu;
+                const rect = atu.getBoundingClientRect();
+                atu.style.setProperty('--press-x', ((e.clientX - rect.left) / rect.width * 100) + '%');
+                atu.style.setProperty('--press-y', ((e.clientY - rect.top) / rect.height * 100) + '%');
+
+                longPressTimer = setTimeout(() => {
+                    if (!isDragging) {
+                        atu.classList.remove('pressing');
+                        openSidecar(atu);
+                    }
+                }, 600);
+
+                setTimeout(() => { if (!isDragging) atu.classList.add('pressing'); }, 100);
+            }
+        });
+
+        surface.addEventListener('pointermove', e => {
+            const dy = e.clientY - pressStartY;
+            if (Math.abs(dy) > 10) {
+                isDragging = true;
+                clearTimeout(longPressTimer);
+                document.querySelectorAll('.atu.pressing').forEach(a => a.classList.remove('pressing'));
+            }
+
+            const atTop = wasAtTop || isNearTop();
+            const atBottom = wasAtBottom || isNearBottom();
+
+            if (atTop && dy > 20) {
+                pullState = 'top';
+                pullDistance = dy;
+                const ind = document.getElementById('pull-indicator-top');
+                ind.classList.add('visible');
+                ind.classList.toggle('ready', dy > PULL_THRESHOLD);
+                document.getElementById('pull-top-text').textContent = dy > PULL_THRESHOLD ? 'Release for context' : 'Pull for context';
+            } else if (atBottom && dy < -20) {
+                pullState = 'bottom';
+                pullDistance = Math.abs(dy);
+                const ind = document.getElementById('pull-indicator-bottom');
+                ind.classList.add('visible');
+                ind.classList.toggle('ready', pullDistance > PULL_THRESHOLD);
+                document.getElementById('pull-bottom-text').textContent = pullDistance > PULL_THRESHOLD ? 'Release to end session' : 'Pull to close session';
+            }
+        });
+
+        surface.addEventListener('pointerup', e => {
+            clearTimeout(longPressTimer);
+            document.querySelectorAll('.atu.pressing').forEach(a => a.classList.remove('pressing'));
+
+            if (pullState === 'top' && pullDistance > PULL_THRESHOLD) openOverlay('context-ui');
+            else if (pullState === 'bottom' && pullDistance > PULL_THRESHOLD) { populateSessionClose(); openOverlay('session-close'); }
+
+            document.getElementById('pull-indicator-top').classList.remove('visible', 'ready');
+            document.getElementById('pull-indicator-bottom').classList.remove('visible', 'ready');
+            pullState = null; pullDistance = 0; wasAtTop = false; wasAtBottom = false;
+
+            if (!isDragging) {
+                const sentence = e.target.closest('.sentence');
+                if (sentence) sentence.classList.toggle('highlighted');
+            }
+        });
+
+        surface.addEventListener('pointercancel', () => {
+            clearTimeout(longPressTimer);
+            document.querySelectorAll('.atu.pressing').forEach(a => a.classList.remove('pressing'));
+            document.getElementById('pull-indicator-top').classList.remove('visible', 'ready');
+            document.getElementById('pull-indicator-bottom').classList.remove('visible', 'ready');
+            pullState = null; wasAtTop = false; wasAtBottom = false;
+        });
+
+        document.addEventListener('touchmove', e => { if (pullState) e.preventDefault(); }, { passive: false });
+    }
+
+    // ─── SIDECAR (FULLSCREEN 40/30/30) ──────────────────
+
+    function openSidecar(atu) {
+        currentAtu = atu;
+        const key = getAtuKey(atu.textContent);
+        const data = knowledgeDb[key];
+
+        // Build color-coded paragraph HTML
+        let html = atu.textContent;
+
+        if (data && data.items.length > 0) {
+            const sorted = [...data.items].sort((a, b) =>
+                Math.max(...b.phrases.map(p => p.length)) - Math.max(...a.phrases.map(p => p.length))
+            );
+
+            const placeholders = [];
+            sorted.forEach((item, idx) => {
+                item.phrases.forEach(phrase => {
+                    const regex = new RegExp(`\\b(${escapeRegex(phrase)})\\b`, 'gi');
+                    html = html.replace(regex, match => {
+                        const ph = `__PH${placeholders.length}__`;
+                        const tc = item.column === 'entity' ? 't-entity' : item.column === 'word' ? 't-word' : 't-idiom';
+                        const dc = depthClass(item.depth);
+                        placeholders.push(`<span class="cw ${tc} ${dc}" data-idx="${idx}" onclick="onWordTap(this, ${idx})">${match}</span>`);
+                        return ph;
+                    });
+                });
+            });
+
+            placeholders.forEach((r, i) => { html = html.replace(`__PH${i}__`, r); });
+        }
+
+        document.getElementById('sidecar-text').innerHTML = html;
+
+        // Reset tabs
+        switchTab('reflection');
+        renderReflections();
+        resetDefinition();
+        resetIntuition();
+
+        // Show overlay
+        const overlay = document.getElementById('sidecar-overlay');
+        overlay.style.display = 'flex';
+        requestAnimationFrame(() => { overlay.classList.add('active'); });
+
+        // Auto-resize textarea
+        const ta = document.getElementById('ref-textarea');
+        ta.value = '';
+        ta.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 80) + 'px';
+        });
+    }
+
+    function closeSidecar() {
+        clearFadeBack();
+        const overlay = document.getElementById('sidecar-overlay');
+        overlay.classList.remove('active');
+        setTimeout(() => { overlay.style.display = 'none'; }, 350);
+    }
+
+    // ─── TAB SWITCHING ───────────────────────────────────
+
+    function switchTab(tab) {
+        activeTab = tab;
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === `panel-${tab}`));
+
+        if (tab === 'intuition') generateIntuition();
+
+        // Any manual tab switch kills the fade-back timer
+        // (reflection, intuition, or even manually tapping definition tab)
+        clearFadeBack();
+    }
+
+    // ─── WORD TAP → DEFINITION ───────────────────────────
+
+    function onWordTap(el, idx) {
+        if (!currentAtu) return;
+        const key = getAtuKey(currentAtu.textContent);
+        const data = knowledgeDb[key];
+        if (!data) return;
+
+        const sorted = [...data.items].sort((a, b) =>
+            Math.max(...b.phrases.map(p => p.length)) - Math.max(...a.phrases.map(p => p.length))
+        );
+        const item = sorted[idx];
+        if (!item) return;
+
+        // Deselect previous, select this
+        document.querySelectorAll('#sidecar-text .cw.selected').forEach(w => w.classList.remove('selected'));
+        el.classList.add('selected');
+
+        // Check if there's text in the reflection textarea BEFORE switching
+        const refTextarea = document.getElementById('ref-textarea');
+        hadReflectionText = refTextarea && refTextarea.value.trim().length > 0;
+
+        // Fill definition
+        const colorMap = {
+            entity: { bg: 'var(--blue-light)', color: 'var(--blue-deep)' },
+            word: { bg: 'var(--yellow-light)', color: 'var(--yellow-deep)' },
+            idiom: { bg: 'var(--green-light)', color: 'var(--green-deep)' }
+        };
+        const c = colorMap[item.column] || colorMap.word;
+
+        document.getElementById('def-content').innerHTML = `
+            <div class="def-content">
+                <div class="def-word">${item.name}</div>
+                <div class="def-type-badge" style="background:${c.bg}; color:${c.color}">${item.type} · ${item.column}</div>
+                <div class="def-meaning">${item.desc}</div>
+            </div>`;
+
+        // Auto-switch to Definition tab
+        switchTab('definition');
+
+        // Start fade-back if user was mid-reflection
+        if (hadReflectionText) startFadeBack();
+    }
+
+    // ─── FADE-BACK LOGIC ─────────────────────────────────
+    // If user was typing a reflection and tapped a word:
+    // - Switch to Definition
+    // - After 5s, crossfade back to Reflection
+    // - If user touches the Definition panel, reset the 5s timer
+    // - Pulsing amber dot on the Reflection tab signals "you'll return"
+
+    function startFadeBack() {
+        clearFadeBack();
+
+        // Show pulsing indicator on Reflection tab
+        document.getElementById('reflect-fade-ring').classList.add('pulsing');
+
+        // Start the subtle progress bar
+        const bar = document.getElementById('def-fade-bar');
+        bar.classList.remove('counting');
+        bar.offsetHeight; // reflow
+        bar.classList.add('counting');
+
+        // Start 5s timer — slow crossfade back to Reflection
+        fadeBackTimer = setTimeout(() => {
+            clearFadeBack();
+            switchTab('reflection');
+            // Re-focus the textarea after transition settles
+            setTimeout(() => {
+                const ta = document.getElementById('ref-textarea');
+                if (ta) ta.focus();
+            }, 700);
+        }, 5000);
+
+        // Touch on definition panel = user is engaging, kill the timer entirely
+        const panel = document.getElementById('panel-definition');
+        panel.addEventListener('pointerdown', killFadeBack, { once: true });
+    }
+
+    function killFadeBack() {
+        // User touched Definition — they want to stay. Kill timer completely.
+        clearFadeBack();
+    }
+
+    function clearFadeBack() {
+        if (fadeBackTimer) { clearTimeout(fadeBackTimer); fadeBackTimer = null; }
+        document.getElementById('reflect-fade-ring').classList.remove('pulsing');
+        const bar = document.getElementById('def-fade-bar');
+        bar.classList.remove('counting');
+        const panel = document.getElementById('panel-definition');
+        panel.removeEventListener('pointerdown', killFadeBack);
+    }
+
+    // ─── REFLECTIONS ─────────────────────────────────────
+
+    function renderReflections() {
+        const list = document.getElementById('ref-notes-list');
+        if (!list || !currentAtu) return;
+
+        const key = getAtuKey(currentAtu.textContent);
+        const notes = notesDb[key] || [];
+
+        list.innerHTML = '';
+        notes.forEach((note, i) => {
+            const div = document.createElement('div');
+            div.className = 'ref-note';
+            div.innerHTML = `
+                <span class="ref-note-text">"${note}"</span>
+                <div class="ref-note-actions">
+                    <span onclick="deleteReflection(${i})">×</span>
+                </div>`;
+            list.appendChild(div);
+        });
+    }
+
+    function saveReflection() {
+        const ta = document.getElementById('ref-textarea');
+        if (!ta || !currentAtu) return;
+        const val = ta.value.trim();
+        if (!val) return;
+
+        const key = getAtuKey(currentAtu.textContent);
+        if (!notesDb[key]) notesDb[key] = [];
+        notesDb[key].push(val);
+
+        ta.value = '';
+        ta.style.height = 'auto';
+        renderReflections();
+    }
+
+    function deleteReflection(idx) {
+        if (!currentAtu) return;
+        const key = getAtuKey(currentAtu.textContent);
+        if (notesDb[key]) {
+            notesDb[key].splice(idx, 1);
+            renderReflections();
+        }
+    }
+
+    // ─── DEFINITION ──────────────────────────────────────
+
+    function resetDefinition() {
+        document.getElementById('def-content').innerHTML = '<div class="def-empty">Tap a highlighted word above to see its meaning</div>';
+        clearFadeBack();
+    }
+
+    // ─── INTUITION ───────────────────────────────────────
+
+    function generateIntuition() {
+        if (!currentAtu) return;
+        const key = getAtuKey(currentAtu.textContent);
+        const data = knowledgeDb[key];
+
+        const container = document.getElementById('intuition-content');
+        if (!data || !data.intuition) {
+            container.innerHTML = '<div class="intuition-placeholder">No reading guide available for this paragraph.</div>';
+            return;
+        }
+
+        container.innerHTML = `
+            <div class="intuition-content">
+                <div class="intuition-label">Reading Guide</div>
+                <div class="intuition-text">${data.intuition}</div>
+            </div>`;
+    }
+
+    function resetIntuition() {
+        document.getElementById('intuition-content').innerHTML =
+            '<div class="intuition-placeholder">Tap to receive a reading guide for this paragraph</div>';
+    }
+
+    // ─── OVERLAY MANAGEMENT ──────────────────────────────
+
+    function openOverlay(id) { document.getElementById(id).classList.add('active'); }
+    function closeOverlay(id) { document.getElementById(id).classList.remove('active'); }
+
+    // ─── SESSION CLOSE ───────────────────────────────────
+
+    let sessionEditingKey = null;
+    let sessionEditingIdx = -1;
+
+    function populateSessionClose() {
+        const viewer = document.getElementById('session-aru-viewer');
+        viewer.innerHTML = '';
+        document.querySelectorAll('.atu').forEach((atu, i) => {
+            const div = document.createElement('div');
+            div.className = 'session-atu';
+            if (atu.classList.contains('is-header')) div.classList.add('is-header');
+            if (atu.classList.contains('is-signature')) div.classList.add('is-signature');
+            div.setAttribute('data-atu-index', i);
+            div.textContent = atu.textContent;
+            viewer.appendChild(div);
+        });
+        populateSessionReflections();
+    }
+
+    function scrollToSessionAtu(atuKey) {
+        const viewer = document.getElementById('session-aru-viewer');
+        viewer.querySelectorAll('.session-atu').forEach(el => el.classList.remove('atu-highlighted'));
+
+        let idx = -1;
+        document.querySelectorAll('.atu').forEach((atu, i) => {
+            if (getAtuKey(atu.textContent) === atuKey) idx = i;
+        });
+
+        if (idx >= 0) {
+            const el = viewer.querySelector(`[data-atu-index="${idx}"]`);
+            if (el) { el.classList.add('atu-highlighted'); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+        }
+
+        document.querySelectorAll('.session-atu-group').forEach(g => {
+            g.classList.toggle('active', g.getAttribute('data-atu-key') === atuKey);
+        });
+    }
+
+    function populateSessionReflections() {
+        const container = document.getElementById('session-reflections');
+        container.innerHTML = '';
+
+        const aruNotes = notesDb['__aru__'] || [];
+        const atus = document.querySelectorAll('.atu');
+
+        aruNotes.forEach((note, i) => {
+            const card = document.createElement('div');
+            card.className = 'session-aru-card';
+            card.innerHTML = `
+                <div class="aru-card-label">Session Reflection</div>
+                <div class="aru-card-note">${note}</div>
+                <div class="aru-card-actions">
+                    <span onclick="editSessionNote('__aru__', ${i})">Edit</span>
+                    <span onclick="deleteSessionNote('__aru__', ${i})">Delete</span>
+                </div>`;
+            container.appendChild(card);
+        });
+
+        let hasAtu = false;
+        atus.forEach(atu => {
+            if (atu.classList.contains('is-header') || atu.classList.contains('is-signature')) return;
+            const key = getAtuKey(atu.textContent);
+            const notes = notesDb[key];
+            if (!notes || !notes.length) return;
+
+            hasAtu = true;
+            const snippet = atu.textContent.substring(0, 80).trim() + '…';
+            const group = document.createElement('div');
+            group.className = 'session-atu-group';
+            group.setAttribute('data-atu-key', key);
+            group.onclick = e => { if (!e.target.closest('.session-atu-note-actions')) scrollToSessionAtu(key); };
+
+            let h = `<div class="session-atu-snippet">${snippet}</div>`;
+            notes.forEach((note, i) => {
+                h += `<div class="session-atu-note">
+                    <span class="session-atu-note-text">"${note}"</span>
+                    <div class="session-atu-note-actions">
+                        <span onclick="editSessionNote('${key}', ${i})">Edit</span>
+                        <span onclick="deleteSessionNote('${key}', ${i})">Del</span>
+                    </div></div>`;
+            });
+            group.innerHTML = h;
+            container.appendChild(group);
+        });
+
+        if (!aruNotes.length && !hasAtu) {
+            container.innerHTML = '<div class="session-empty">No reflections recorded during this sitting.</div>';
+        }
+    }
+
+    function openSessionNotes() {
+        sessionEditingKey = '__aru__';
+        sessionEditingIdx = -1;
+        document.getElementById('notes-source-text').textContent = 'Reflecting on the entire session…';
+        const ex = notesDb['__aru__'] || [];
+        document.getElementById('notes-past-reflections').innerHTML = ex.length
+            ? '<strong>Previous:</strong><br>' + ex.map(n => `· ${n}`).join('<br>') : '';
+        document.getElementById('notes-textarea').value = '';
+        document.getElementById('notes-textarea').placeholder = 'What did this sitting mean to you…';
+        openOverlay('notes-ui');
+        setTimeout(() => document.getElementById('notes-textarea').focus(), 400);
+    }
+
+    function editSessionNote(key, idx) {
+        sessionEditingKey = key;
+        sessionEditingIdx = idx;
+        if (key === '__aru__') {
+            document.getElementById('notes-source-text').textContent = 'Reflecting on the entire session…';
+        } else {
+            let src = null;
+            document.querySelectorAll('.atu').forEach(a => { if (getAtuKey(a.textContent) === key) src = a; });
+            document.getElementById('notes-source-text').textContent = src ? src.textContent : key;
+        }
+        document.getElementById('notes-past-reflections').innerHTML = '';
+        document.getElementById('notes-textarea').value = (notesDb[key] || [])[idx] || '';
+        document.getElementById('notes-textarea').placeholder = 'Edit your reflection…';
+        openOverlay('notes-ui');
+        setTimeout(() => document.getElementById('notes-textarea').focus(), 400);
+    }
+
+    function deleteSessionNote(key, idx) {
+        if (notesDb[key]) {
+            notesDb[key].splice(idx, 1);
+            if (!notesDb[key].length && key !== '__aru__') delete notesDb[key];
+            populateSessionReflections();
+        }
+    }
+
+    function saveSessionNote() {
+        const val = document.getElementById('notes-textarea').value.trim();
+        if (!val) { closeNotes(); return; }
+        if (!notesDb[sessionEditingKey]) notesDb[sessionEditingKey] = [];
+        if (sessionEditingIdx > -1) notesDb[sessionEditingKey][sessionEditingIdx] = val;
+        else notesDb[sessionEditingKey].push(val);
+        closeNotes();
+        populateSessionReflections();
+    }
+
+    function closeNotes() {
+        closeOverlay('notes-ui');
+        document.getElementById('notes-textarea').value = '';
+        sessionEditingKey = null;
+        sessionEditingIdx = -1;
+    }
+
+    // ─── BOOT ────────────────────────────────────────────
+    window.onload = init;
+    </script>
+</body>
+</html>
