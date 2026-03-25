@@ -1,0 +1,1445 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Octopus Reading Engine — Inline Variant</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Inter:wght@300;400;500;600&display=swap');
+
+        :root {
+            --bg: #FAF8F5;
+            --ink: #1C1917;
+            --ink-soft: #57534E;
+            --ink-ghost: #A8A29E;
+            --highlight: rgba(180, 160, 120, 0.15);
+            --highlight-active: rgba(180, 160, 120, 0.28);
+            --rule: rgba(0, 0, 0, 0.06);
+
+            --blue-deep: #1E3A5F;
+            --blue-mid: #4A7FB5;
+            --blue-pale: #A8CCE8;
+            --blue-light: #D6E8F7;
+            --blue-ghost: #EBF3FA;
+
+            --yellow-deep: #5C4E00;
+            --yellow-mid: #A89200;
+            --yellow-pale: #D4C560;
+            --yellow-light: #F5EFD0;
+            --yellow-ghost: #FAF7E8;
+
+            --green-deep: #1B4332;
+            --green-mid: #52796F;
+            --green-pale: #95D5B2;
+            --green-light: #D8F3DC;
+            --green-ghost: #EDF6EE;
+
+            --amber: #C4A35A;
+            --amber-soft: #A08840;
+
+            --serif: 'Cormorant Garamond', 'Georgia', serif;
+            --sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+
+            --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+            --ease-spring: cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        *, *::before, *::after {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            background: var(--bg);
+            color: var(--ink);
+            font-family: var(--serif);
+            font-size: 20px;
+            line-height: 1.75;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .hidden { display: none !important; }
+
+        /* ═══════════════════════════════════════
+           ZERO-UI READING CANVAS
+           ═══════════════════════════════════════ */
+
+        #reading-surface {
+            position: relative;
+            min-height: 100vh;
+            touch-action: pan-y;
+            /* OS Overrides for Long Press */
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+            /* Rubber-band Snap Back */
+            transition: transform 0.4s var(--ease-spring);
+        }
+
+        /* Disables transition so the container tracks finger instantly */
+        #reading-surface.pulling {
+            transition: none;
+        }
+
+        #aru-container {
+            padding: 15vh 32px 20vh 32px;
+            max-width: 620px;
+            margin: 0 auto;
+        }
+
+        /* ═══════════════════════════════════════
+           IN-PAGE CONTEXT BLOCKS
+           ═══════════════════════════════════════ */
+
+        .in-page-context {
+            margin-bottom: 48px;
+            padding-bottom: 32px;
+            border-bottom: 1px solid var(--rule);
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+            animation: fadeInDown 0.6s var(--ease-out-expo) forwards;
+        }
+
+        @keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .context-section h2 {
+            font-family: var(--sans); font-size: 10px; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 3px; color: var(--ink-ghost); border-bottom: 1px solid var(--rule);
+            padding-bottom: 12px; margin-bottom: 20px;
+        }
+
+        .context-prose { font-family: var(--serif); font-size: 18px; line-height: 1.8; color: var(--ink-soft); }
+
+        .entity-list { list-style: none; padding: 0; margin: 20px 0 0 0; }
+        .entity-list li {
+            padding: 14px 0; border-bottom: 1px solid var(--rule); font-family: var(--sans);
+            font-size: 13px; line-height: 1.6; color: var(--ink-soft);
+        }
+        .entity-name { font-weight: 600; color: var(--ink); font-size: 14px; }
+        .entity-tag {
+            font-size: 9px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase;
+            padding: 2px 8px; border-radius: 3px; margin-left: 8px; vertical-align: middle;
+        }
+        .entity-tag.history { background: var(--blue-light); color: var(--blue-deep); }
+        .entity-tag.new { background: var(--green-light); color: var(--green-deep); }
+
+
+        /* ═══════════════════════════════════════
+           PROSE & ATU STYLING
+           ═══════════════════════════════════════ */
+
+        .atu {
+            margin-bottom: 0;
+            text-indent: 0;
+            padding: 0.4em 0;
+            position: relative;
+            transition: filter 0.4s var(--ease-out-expo), opacity 0.4s var(--ease-out-expo);
+        }
+
+        .atu + .atu { text-indent: 1.8em; }
+        .atu.is-header { text-indent: 0; font-weight: 500; font-size: 0.95em; color: var(--ink-soft); }
+        .atu.is-signature { text-indent: 0; margin-top: 1.5em; }
+
+        .sentence {
+            cursor: pointer;
+            border-radius: 2px;
+            transition: background-color 0.25s ease;
+            padding: 1px 0;
+        }
+
+        .sentence.highlighted { background-color: var(--highlight); }
+
+        .atu.pressing {
+            background: radial-gradient(ellipse at var(--press-x, 50%) var(--press-y, 50%), rgba(0,0,0,0.03) 0%, transparent 70%);
+        }
+
+        /* ═══════════════════════════════════════
+           PULL INDICATORS
+           ═══════════════════════════════════════ */
+
+        .pull-indicator {
+            position: fixed;
+            left: 0;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            z-index: 40;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            font-family: var(--sans);
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--ink-ghost);
+        }
+
+        .pull-indicator.top { top: 0; height: 60px; transform: translateY(-100%); }
+        .pull-indicator.bottom { bottom: 0; height: 60px; transform: translateY(100%); }
+
+        .pull-indicator.visible { opacity: 1; transform: translateY(0); }
+        .pull-indicator.ready { color: var(--ink-soft); }
+
+        /* ═══════════════════════════════════════
+           FULLSCREEN SIDECAR — 60 / 40
+           ═══════════════════════════════════════ */
+
+        #sidecar-overlay {
+            position: fixed;
+            top: 0;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100%;
+            max-width: 620px;
+            z-index: 200;
+            background: var(--bg);
+            display: none;
+            flex-direction: column;
+            opacity: 0;
+            transition: opacity 0.35s var(--ease-out-expo);
+        }
+
+        #sidecar-overlay.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        #sidecar-source {
+            height: 60%;
+            overflow-y: auto;
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--rule);
+            position: relative;
+            scroll-behavior: smooth;
+        }
+
+        #sidecar-source-label {
+            font-family: var(--sans);
+            font-size: 9px;
+            font-weight: 600;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--ink-ghost);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        #sidecar-close {
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: 1.5px;
+            cursor: pointer;
+            padding: 4px 0;
+            transition: color 0.2s ease;
+        }
+
+        #sidecar-text {
+            font-family: var(--serif);
+            font-size: 18px;
+            line-height: 1.8;
+            color: var(--ink);
+        }
+
+        .source-legend {
+            display: flex;
+            gap: 14px;
+            margin-top: 14px;
+            padding-top: 10px;
+            border-top: 1px solid var(--rule);
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-family: var(--sans);
+            font-size: 9px;
+            font-weight: 500;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+            color: var(--ink-ghost);
+        }
+
+        .legend-dot { width: 8px; height: 8px; border-radius: 2px; }
+        .legend-dot.entity { background: var(--blue-mid); }
+        .legend-dot.word { background: var(--yellow-mid); }
+        .legend-dot.idiom { background: var(--green-mid); }
+
+        .cw {
+            cursor: pointer;
+            border-radius: 3px;
+            padding: 0 3px;
+            margin: 0 -1px;
+            transition: all 0.2s ease;
+            text-decoration-style: dotted;
+            text-decoration-thickness: 1.5px;
+            text-underline-offset: 3px;
+        }
+
+        .cw:active { filter: brightness(0.88); }
+
+        .cw.selected {
+            filter: brightness(0.85);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+            transform: scale(1.02);
+        }
+
+        .cw.t-entity.d-lore        { background: rgba(30,58,95,0.18); color: var(--blue-deep); text-decoration-color: var(--blue-deep); }
+        .cw.t-entity.d-contextual   { background: rgba(74,127,181,0.15); color: var(--blue-mid); text-decoration-color: var(--blue-mid); }
+        .cw.t-entity.d-universal    { background: rgba(214,232,247,0.5); color: var(--blue-deep); text-decoration-color: var(--blue-pale); }
+
+        .cw.t-word.d-lore           { background: rgba(92,78,0,0.15); color: var(--yellow-deep); text-decoration-color: var(--yellow-deep); }
+        .cw.t-word.d-contextual     { background: rgba(168,146,0,0.12); color: var(--yellow-mid); text-decoration-color: var(--yellow-mid); }
+        .cw.t-word.d-universal      { background: rgba(245,239,208,0.6); color: var(--yellow-deep); text-decoration-color: var(--yellow-pale); }
+
+        .cw.t-idiom.d-lore          { background: rgba(27,67,50,0.15); color: var(--green-deep); text-decoration-color: var(--green-deep); }
+        .cw.t-idiom.d-contextual    { background: rgba(82,121,111,0.12); color: var(--green-mid); text-decoration-color: var(--green-mid); }
+        .cw.t-idiom.d-universal     { background: rgba(216,243,220,0.6); color: var(--green-deep); text-decoration-color: var(--green-pale); }
+
+        #sidecar-tabs-area {
+            height: 40%;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .tab-panels-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .tab-bar {
+            display: flex;
+            flex-shrink: 0;
+            border-bottom: 1px solid var(--rule);
+            background: #FAFAF8;
+        }
+
+        .tab-btn {
+            flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 12px 8px;
+            cursor: pointer; font-family: var(--sans); font-size: 11px; font-weight: 500; letter-spacing: 1px;
+            text-transform: uppercase; color: var(--ink-ghost); border-bottom: 2px solid transparent;
+            transition: color 0.25s ease, border-color 0.25s ease; position: relative;
+        }
+
+        .tab-btn.active { color: var(--ink); border-bottom-color: var(--ink); }
+
+        .tab-btn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+        .tab-btn .fade-ring {
+            position: absolute; top: 6px; right: 12px; width: 6px; height: 6px; border-radius: 50%;
+            background: var(--amber); opacity: 0; transition: opacity 0.3s ease;
+        }
+
+        .tab-btn .fade-ring.pulsing { opacity: 1; animation: subtlePulse 1.2s ease infinite; }
+
+        @keyframes subtlePulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+        @keyframes fadeTab { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+        .tab-panel {
+            position: absolute; inset: 0; overflow-y: auto; padding: 16px 24px;
+            opacity: 0; pointer-events: none; transition: opacity 0.6s ease;
+        }
+
+        .tab-panel.active { opacity: 1; pointer-events: all; }
+
+        .ref-note {
+            display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
+            padding: 8px 0; border-bottom: 1px solid var(--rule); font-family: var(--serif);
+            font-size: 14px; line-height: 1.5; color: var(--ink-soft); font-style: italic;
+        }
+
+        .ref-note-text { flex: 1; }
+        .ref-note-actions { flex-shrink: 0; display: flex; gap: 4px; }
+        .ref-note-actions span {
+            font-family: var(--sans); font-size: 10px; color: var(--ink-ghost); cursor: pointer;
+            padding: 2px 6px; border-radius: 3px; transition: color 0.2s ease, background 0.2s ease;
+        }
+
+        .ref-input-row { display: flex; gap: 8px; align-items: flex-end; margin-top: 8px; }
+
+        .ref-textarea {
+            flex: 1; background: rgba(0, 0, 0, 0.03); border: 1px solid var(--rule); border-radius: 8px;
+            padding: 10px 14px; font-family: var(--serif); font-size: 15px; line-height: 1.5; color: var(--ink);
+            resize: none; outline: none; min-height: 40px; max-height: 80px; transition: border-color 0.2s ease;
+        }
+
+        .ref-save-btn {
+            background: var(--ink); border: none; color: var(--bg); font-family: var(--sans);
+            font-size: 11px; font-weight: 600; letter-spacing: 0.5px; padding: 10px 16px;
+            border-radius: 8px; cursor: pointer; transition: opacity 0.15s ease, transform 0.15s ease; white-space: nowrap;
+        }
+
+        .def-empty { font-family: var(--serif); font-size: 15px; font-style: italic; color: var(--ink-ghost); line-height: 1.7; padding: 8px 0; }
+        .def-content { animation: fadeTab 0.3s ease forwards; }
+        .def-word { font-family: var(--sans); font-weight: 600; font-size: 17px; color: var(--ink); margin-bottom: 4px; }
+        .def-type-badge {
+            display: inline-block; font-family: var(--sans); font-size: 9px; font-weight: 600;
+            letter-spacing: 1.5px; text-transform: uppercase; padding: 3px 10px; border-radius: 4px; margin-bottom: 10px;
+        }
+        .def-meaning { font-family: var(--serif); font-size: 16px; line-height: 1.7; color: var(--ink-soft); }
+
+        .def-fade-bar {
+            position: absolute; bottom: 0; left: 0; height: 2px; background: var(--ink-ghost);
+            width: 100%; transform-origin: right; transform: scaleX(1); opacity: 0; transition: opacity 0.4s ease;
+        }
+
+        .def-fade-bar.counting { opacity: 0.5; transform: scaleX(0); transition: opacity 0.4s ease, transform 5s linear; }
+
+        .intuition-placeholder { font-family: var(--serif); font-size: 15px; font-style: italic; color: var(--ink-ghost); line-height: 1.7; padding: 8px 0; }
+        .intuition-content { animation: fadeTab 0.4s ease forwards; }
+        .intuition-label { font-family: var(--sans); font-size: 9px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: var(--amber-soft); margin-bottom: 10px; }
+        .intuition-text { font-family: var(--serif); font-size: 16px; line-height: 1.75; color: var(--ink); }
+
+        /* ═══════════════════════════════════════
+           FULL-PAGE REFLECTION PAGE
+           ═══════════════════════════════════════ */
+
+        #reflection-page {
+            position: fixed; inset: 0; background: var(--bg); overflow-y: auto; z-index: 50; touch-action: pan-y;
+        }
+
+        .rp-container { max-width: 620px; margin: 0 auto; padding: 48px 28px 30vh 28px; }
+        .rp-title { font-family: var(--serif); font-size: 28px; font-weight: 500; color: var(--ink); margin: 0 0 4px 0; }
+        .rp-subtitle { font-family: var(--sans); font-size: 10px; font-weight: 500; letter-spacing: 2px; text-transform: uppercase; color: var(--ink-ghost); margin-bottom: 32px; }
+
+        .rp-aru-card { margin-bottom: 16px; padding: 16px 20px; background: rgba(180,160,120,0.06); border-radius: 8px; border-left: 4px solid var(--amber); }
+        .rp-aru-card-label { font-family: var(--sans); font-size: 9px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--amber-soft); margin-bottom: 6px; }
+        .rp-aru-card-note { font-family: var(--serif); font-size: 16px; line-height: 1.6; color: var(--ink); }
+        .rp-aru-card-actions { display: flex; gap: 8px; margin-top: 8px; }
+        .rp-aru-card-actions span { font-family: var(--sans); font-size: 11px; color: var(--ink-ghost); cursor: pointer; transition: color 0.2s ease; }
+
+        .rp-aru-input-row { display: flex; gap: 8px; align-items: flex-end; margin-top: 12px; margin-bottom: 24px; }
+        .rp-divider { height: 1px; background: var(--rule); margin: 24px 0; }
+
+        .rp-atu-group { margin-bottom: 16px; padding: 14px 16px; background: rgba(0,0,0,0.02); border-radius: 8px; border-left: 3px solid var(--rule); transition: background 0.2s ease, border-color 0.2s ease; }
+        .rp-atu-group.expanded { border-left-color: var(--ink-soft); background: rgba(0,0,0,0.04); }
+        .rp-atu-header { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+        .rp-atu-snippet { flex: 1; font-family: var(--serif); font-size: 12px; line-height: 1.4; color: var(--ink-ghost); font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .rp-atu-count { font-family: var(--sans); font-size: 9px; font-weight: 600; background: var(--rule); color: var(--ink-soft); padding: 2px 7px; border-radius: 10px; flex-shrink: 0; }
+        .rp-atu-chevron { font-family: var(--sans); font-size: 12px; color: var(--ink-ghost); transition: transform 0.2s ease; flex-shrink: 0; }
+        .rp-atu-group.expanded .rp-atu-chevron { transform: rotate(90deg); }
+        .rp-atu-body { display: none; margin-top: 12px; }
+        .rp-atu-group.expanded .rp-atu-body { display: block; }
+        .rp-atu-full-text { font-family: var(--serif); font-size: 14px; line-height: 1.6; color: var(--ink-ghost); margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--rule); }
+        .rp-atu-note { font-family: var(--serif); font-size: 15px; line-height: 1.55; color: var(--ink-soft); padding: 6px 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+        .rp-atu-note + .rp-atu-note { border-top: 1px solid var(--rule); margin-top: 4px; padding-top: 8px; }
+        .rp-atu-note-text { flex: 1; }
+        .rp-atu-note-actions { flex-shrink: 0; display: flex; gap: 4px; }
+        .rp-atu-note-actions span { font-family: var(--sans); font-size: 10px; color: var(--ink-ghost); cursor: pointer; padding: 2px 4px; border-radius: 3px; }
+        .rp-empty { font-family: var(--serif); font-size: 16px; color: var(--ink-ghost); font-style: italic; padding: 20px 0; }
+        .rp-edit-row { display: flex; gap: 8px; align-items: flex-end; margin-top: 4px; }
+
+        /* ═══════════════════════════════════════
+           PROGRESS DOTS
+           ═══════════════════════════════════════ */
+
+        #progress-bar {
+            position: fixed; right: 8px; top: 50%; transform: translateY(-50%);
+            display: flex; flex-direction: column; gap: 3px; opacity: 0;
+            transition: opacity 0.6s ease; z-index: 30; pointer-events: none;
+        }
+        #progress-bar.visible { opacity: 1; }
+        .progress-dot { width: 3px; height: 3px; border-radius: 50%; background: var(--ink-ghost); transition: background 0.3s ease, transform 0.3s ease; }
+        .progress-dot.active { background: var(--ink-soft); transform: scale(1.5); }
+
+        ::-webkit-scrollbar { width: 0; background: transparent; }
+        ::selection { background: rgba(180, 160, 120, 0.3); }
+    </style>
+</head>
+
+<body>
+
+    <div class="pull-indicator top" id="pull-indicator-top"><span id="pull-top-text">Pull for context</span></div>
+    <div class="pull-indicator bottom" id="pull-indicator-bottom"><span id="pull-bottom-text">Pull to reflect</span></div>
+    <div id="progress-bar"></div>
+
+    <div id="reading-surface">
+        <div id="aru-container">
+
+            <div id="in-page-context-global" class="in-page-context hidden">
+                <div class="context-section">
+                    <h2>The Story So Far</h2>
+                    <div id="context-global-paragraphs"></div>
+                </div>
+            </div>
+
+            <div id="in-page-context-local" class="in-page-context hidden">
+                <div class="context-section">
+                    <h2>Session Context</h2>
+                    <p class="context-prose" id="context-local-summary"></p>
+                    <h2 style="margin-top:36px">Entities Encountered</h2>
+                    <ul class="entity-list" id="context-local-entities"></ul>
+                </div>
+            </div>
+
+            <p class="atu is-header" data-opus-lineage="D9.H7" data-opus-type="H2" data-wc="2">Letter 2</p>
+            <p class="atu is-header" data-opus-lineage="D9.P20" data-opus-type="H2" data-wc="5">To Mrs. Saville, England.</p>
+            <p class="atu is-header" data-opus-lineage="D9.P21" data-opus-type="H2" data-wc="5">Archangel, 28th March, 17—.</p>
+            <p class="atu" data-opus-lineage="D9.P22" data-opus-type="PF" data-wc="54">How slowly the time passes here, encompassed as I am by frost and snow! Yet a second step is taken towards my enterprise. I have hired a vessel and am occupied in collecting my sailors; those whom I have already engaged appear to be men on whom I can depend and are certainly possessed of dauntless courage.</p>
+            <p class="atu" data-opus-lineage="D9.P23" data-opus-type="P" data-wc="283">But I have one want which I have never yet been able to satisfy, and the absence of the object of which I now feel as a most severe evil, I have no friend, Margaret: when I am glowing with the enthusiasm of success, there will be none to participate my joy; if I am assailed by disappointment, no one will endeavour to sustain me in dejection. I shall commit my thoughts to paper, it is true; but that is a poor medium for the communication of feeling. I desire the company of a man who could sympathise with me, whose eyes would reply to mine. You may deem me romantic, my dear sister, but I bitterly feel the want of a friend. I have no one near me, gentle yet courageous, possessed of a cultivated as well as of a capacious mind, whose tastes are like my own, to approve or amend my plans. How would such a friend repair the faults of your poor brother! I am too ardent in execution and too impatient of difficulties. But it is a still greater evil to me that I am self-educated: for the first fourteen years of my life I ran wild on a common and read nothing but our Uncle Thomas' books of voyages. At that age I became acquainted with the celebrated poets of our own country; but it was only when it had ceased to be in my power to derive its most important benefits from such a conviction that I perceived the necessity of becoming acquainted with more languages than that of my native country. Now I am twenty-eight and am in reality more illiterate than many schoolboys of fifteen. It is true that I have thought more and that my daydreams are more extended and magnificent, but they want (as the painters call it) keeping; and I greatly need a friend who would have sense enough not to despise me as romantic, and affection enough for me to endeavour to regulate my mind.</p>
+            <p class="atu" data-opus-lineage="D9.P24" data-opus-type="P" data-wc="135">Well, these are useless complaints; I shall certainly find no friend on the wide ocean, nor even here in Archangel, among merchants and seamen. Yet some feelings, unallied to the dross of human nature, beat even in these rugged bosoms. My lieutenant, for instance, is a man of wonderful courage and enterprise; he is madly desirous of glory, or rather, to word my phrase more characteristically, of advancement in his profession. He is an Englishman, and in the midst of national and professional prejudices, unsoftened by cultivation, retains some of the noblest endowments of humanity. I first became acquainted with him on board a whale vessel; finding that he was unemployed in this city, I easily engaged him to assist in my enterprise.</p>
+            <p class="atu" data-opus-lineage="D9.P25" data-opus-type="P" data-wc="310">The master is a person of an excellent disposition and is remarkable in the ship for his gentleness and the mildness of his discipline. This circumstance, added to his well-known integrity and dauntless courage, made me very desirous to engage him. A youth passed in solitude, my best years spent under your gentle and feminine fosterage, has so refined the groundwork of my character that I cannot overcome an intense distaste to the usual brutality exercised on board ship: I have never believed it to be necessary, and when I heard of a mariner equally noted for his kindliness of heart and the respect and obedience paid to him by his crew, I felt myself peculiarly fortunate in being able to secure his services. I heard of him first in rather a romantic manner, from a lady who owes to him the happiness of her life. This, briefly, is his story. Some years ago he loved a young Russian lady of moderate fortune, and having amassed a considerable sum in prize-money, the father of the girl consented to the match. He saw his mistress once before the destined ceremony; but she was bathed in tears, and throwing herself at his feet, entreated him to spare her, confessing at the same time that she loved another, but that he was poor, and that her father would never consent to the union. My generous friend reassured the suppliant, and on being informed of the name of her lover, instantly abandoned his pursuit. He had already bought a farm with his money, on which he had designed to pass the remainder of his life; but he bestowed the whole on his rival, together with the remains of his prize-money to purchase stock, and then himself solicited the young woman's father to consent to her marriage with her lover. But the old man decidedly refused, thinking himself bound in honour to my friend, who, when he found the father inexorable, quitted his country, nor returned until he heard that his former mistress was married according to her inclinations. "What a noble fellow!" you will exclaim. He is so; but then he is wholly uneducated: he is as silent as a Turk, and a kind of ignorant carelessness attends him, which, while it renders his conduct the more astonishing, detracts from the interest and sympathy which otherwise he would command.</p>
+            <p class="atu" data-opus-lineage="D9.P26" data-opus-type="P" data-wc="108">Yet do not suppose, because I complain a little or because I can conceive a consolation for my toils which I may never know, that I am wavering in my resolutions. Those are as fixed as fate, and my voyage is only now delayed until the weather shall permit my embarkation. The winter has been dreadfully severe, but the spring promises well, and it is considered as a remarkably early season, so that perhaps I may sail sooner than I expected. I shall do nothing rashly: you know me sufficiently to confide in my prudence and considerateness whenever the safety of others is committed to my care.</p>
+            <p class="atu" data-opus-lineage="D9.P27" data-opus-type="P" data-wc="176">I cannot describe to you my sensations on the near prospect of my undertaking. It is impossible to communicate to you a conception of the trembling sensation, half pleasurable and half fearful, with which I am preparing to depart. I am going to unexplored regions, to "the land of mist and snow," but I shall kill no albatross; therefore do not be alarmed for my safety or if I should come back to you as worn and woeful as the "Ancient Mariner." You will smile at my allusion, but I will disclose a secret. I have often attributed my attachment to, my passionate enthusiasm for, the dangerous mysteries of ocean to that production of the most imaginative of modern poets. There is something at work in my soul which I do not understand. I am practically industrious—painstaking, a workman to execute with perseverance and labour—but besides this there is a love for the marvellous, a belief in the marvellous, intertwined in all my projects, which hurries me out of the common pathways of men, even to the wild sea and unvisited regions I am about to explore.</p>
+            <p class="atu" data-opus-lineage="D9.P28" data-opus-type="P" data-wc="116">But to return to dearer considerations. Shall I meet you again, after having traversed immense seas, and returned by the most southern cape of Africa or America? I dare not expect such success, yet I cannot bear to look on the reverse of the picture. Continue for the present to write to me by every opportunity: I may receive your letters on some occasions when I need them most to support my spirits. I love you very tenderly. Remember me with affection, should you never hear from me again.</p>
+            <p class="atu is-signature" data-opus-lineage="D9.P29" data-opus-type="PR" data-wc="6">Your affectionate brother,<br>Robert Walton</p>
+        </div>
+    </div>
+
+    <div id="sidecar-overlay">
+        <div id="sidecar-source">
+            <div id="sidecar-source-label">
+                <span>Source Paragraph</span>
+                <span id="sidecar-close" onclick="closeSidecar()">Return</span>
+            </div>
+            <div id="sidecar-text"></div>
+            <div class="source-legend">
+                <div class="legend-item"><span class="legend-dot entity"></span>Entity</div>
+                <div class="legend-item"><span class="legend-dot word"></span>Word</div>
+                <div class="legend-item"><span class="legend-dot idiom"></span>Idiom</div>
+            </div>
+        </div>
+
+        <div id="sidecar-tabs-area">
+            <div class="tab-bar">
+                <div class="tab-btn active" data-tab="reflection" onclick="switchTab('reflection')">
+                    <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                    Reflect
+                    <span class="fade-ring" id="reflect-fade-ring"></span>
+                </div>
+                <div class="tab-btn" data-tab="definition" onclick="switchTab('definition')">
+                    <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                    Define
+                </div>
+                <div class="tab-btn" data-tab="intuition" onclick="switchTab('intuition')">
+                    <svg viewBox="0 0 24 24"><line x1="9" y1="18" x2="15" y2="18"/><line x1="10" y1="22" x2="14" y2="22"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg>
+                    Intuit
+                </div>
+            </div>
+
+            <div class="tab-panels-container">
+                <div class="tab-panel active" id="panel-reflection">
+                    <div id="ref-notes-list"></div>
+                    <div class="ref-input-row">
+                        <textarea class="ref-textarea" id="ref-textarea" placeholder="What are you thinking…" rows="1"></textarea>
+                        <button class="ref-save-btn" onclick="saveReflection()">Save</button>
+                    </div>
+                </div>
+                <div class="tab-panel" id="panel-definition">
+                    <div id="def-content"><div class="def-empty">Tap a highlighted word above to see its meaning</div></div>
+                    <div class="def-fade-bar" id="def-fade-bar"></div>
+                </div>
+                <div class="tab-panel" id="panel-intuition">
+                    <div id="intuition-content"><div class="intuition-placeholder">Tap to receive a reading guide for this paragraph</div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="reflection-page" class="hidden">
+        <div class="rp-container">
+            <div class="rp-header">
+                <h1 class="rp-title">Reflections</h1>
+                <div class="rp-subtitle">Letter 2 — Archangel</div>
+            </div>
+
+            <div id="rp-aru-section"></div>
+            <div class="rp-aru-input-row">
+                <textarea class="ref-textarea" id="rp-aru-textarea" placeholder="Add a session reflection…" rows="1"></textarea>
+                <button class="ref-save-btn" onclick="saveAruReflection()">Save</button>
+            </div>
+            <div class="rp-divider"></div>
+            <div id="rp-atu-section"></div>
+        </div>
+    </div>
+
+    <script>
+    /*
+     * Octopus Reading Engine — Inline UX Implementation
+     * * This script manages the state, gestures, rubber-band physics, and UI updates for the reading experience.
+     * Order of operations:
+     * 1. Initialize DOM elements (sentence wrapping, progress dots).
+     * 2. Attach touch listeners to handle swipe, pull-to-refresh, and long-press gestures.
+     * 3. Handle data injection for the Sidecar based on knowledge items.
+     * 4. Manage Cross-tab states (Reflection, Definition, Intuition).
+     * 5. Handle inline CRUD operations for user reflections.
+     */
+
+    // #region Data and State
+    const knowledgeDb = {
+        "D9.P22": { items: [ { name: "Encompassed", column: "word", type: "Universal", depth: 0.3, desc: "Surrounded and have or hold within.", phrases: ["encompassed"] }, { name: "Dauntless", column: "word", type: "Universal", depth: 0.2, desc: "Showing fearlessness and determination.", phrases: ["dauntless"] }, { name: "Encompassed by frost and snow", column: "idiom", type: "Contextual", depth: 0.7, desc: "Surrounded completely by the harsh winter environment, emphasizing Walton's physical and psychological isolation.", phrases: ["encompassed as I am by frost and snow"] } ], intuition: "This paragraph sets the emotional baseline for the letter. Notice the contrast between physical stasis ('frost and snow', 'slowly') and forward motion ('second step', 'enterprise'). Walton is stuck in place but mentally racing ahead. Pay attention to how he frames his crew — he values courage above all, which foreshadows the risks he's willing to impose on others for his ambition." },
+        "D9.P23": { items: [ { name: "Margaret", column: "entity", type: "History", depth: 0.9, desc: "Walton's sister, also addressed as Mrs. Saville.", phrases: ["Margaret"] }, { name: "Uncle Thomas", column: "entity", type: "Lore", depth: 1.0, desc: "Owner of the books of voyages that educated young Walton.", phrases: ["Uncle Thomas"] }, { name: "Capacious", column: "word", type: "Universal", depth: 0.2, desc: "Having a lot of space inside; roomy. Here describing the ideal friend's mind.", phrases: ["capacious"] }, { name: "Ardent", column: "word", type: "Universal", depth: 0.2, desc: "Enthusiastic or passionate. Walton's self-diagnosis of his own temperament.", phrases: ["ardent"] }, { name: "Ran wild on a common", column: "idiom", type: "Contextual", depth: 0.8, desc: "Growing up without formal constraints or disciplined education, roaming the shared public land.", phrases: ["ran wild on a common"] }, { name: "Want… keeping", column: "idiom", type: "Lore", depth: 1.0, desc: "A painter's term meaning a lack of proper balance, tonal harmony, or coherence in a composition.", phrases: ["want (as the painters call it)"] } ], intuition: "This is Walton's confession of inadequacy — the key to understanding his character. He craves a friend who is his intellectual superior. Track the self-contradictions: he calls himself 'illiterate' while composing deeply articulate prose. The painter's metaphor ('keeping') reveals his real fear: not ignorance, but a lack of internal coherence. He doesn't need a teacher — he needs a mirror. This exact loneliness makes him vulnerable to Victor Frankenstein." },
+        "D9.P24": { items: [ { name: "The Lieutenant", column: "entity", type: "New", depth: 0.9, desc: "An ambitious, unrefined, but noble English officer hired for the voyage.", phrases: ["lieutenant"] }, { name: "Dross", column: "word", type: "Universal", depth: 0.3, desc: "Something regarded as worthless; rubbish. Originally a metallurgical term for impurities.", phrases: ["dross"] }, { name: "Unallied", column: "word", type: "Universal", depth: 0.2, desc: "Not allied or connected to; standing apart from.", phrases: ["unallied"] }, { name: "Dross of human nature", column: "idiom", type: "Contextual", depth: 0.7, desc: "The base, worthless aspects of humanity — the impurities that remain when noble qualities are refined away.", phrases: ["dross of human nature"] } ], intuition: "Walton shifts from self-pity to observation. He's testing whether 'noble feelings' can exist in 'rugged bosoms' — uneducated people. Notice his class bias: the lieutenant is praised but kept at arm's length because he lacks 'cultivation'. Shelley is showing us Walton's blind spot: he values intellect over character, refinement over substance. This will matter when he meets Victor." },
+        "D9.P25": { items: [ { name: "The Master", column: "entity", type: "New", depth: 0.9, desc: "A remarkably gentle ship captain with a tragic romantic past involving a Russian lady.", phrases: ["master"] }, { name: "Inexorable", column: "word", type: "Universal", depth: 0.3, desc: "Impossible to stop or prevent; unyielding to entreaty.", phrases: ["inexorable"] }, { name: "Suppliant", column: "word", type: "Universal", depth: 0.2, desc: "A person making a humble plea to someone in power or authority.", phrases: ["suppliant"] }, { name: "Bathed in tears", column: "idiom", type: "Contextual", depth: 0.6, desc: "Crying profusely; entirely overcome with visible grief.", phrases: ["bathed in tears"] }, { name: "Silent as a Turk", column: "idiom", type: "Lore", depth: 1.0, desc: "An archaic idiom denoting extreme reticence or quietness, reflecting 18th-century European perceptions.", phrases: ["silent as a Turk"] } ], intuition: "This paragraph is a story-within-a-story — the Master's romantic sacrifice. It's the longest paragraph in the letter and the most emotionally complex. Ask yourself: why does Walton tell this story in such detail? Because it's his fantasy — selfless love, noble sacrifice, the admiration of others. But notice the sting in the tail: the Master is 'wholly uneducated' and 'silent', so despite his nobility, Walton still can't see him as a friend. The moral: Walton admires virtue but requires eloquence." },
+        "D9.P26": { items: [ { name: "Embarkation", column: "word", type: "Universal", depth: 0.2, desc: "The process of boarding a ship; the act of beginning a voyage.", phrases: ["embarkation"] }, { name: "Fixed as fate", column: "idiom", type: "Contextual", depth: 0.7, desc: "Unchangeable and inevitable — comparing resolution to cosmic determinism.", phrases: ["fixed as fate"] } ], intuition: "After vulnerability, Walton snaps back to certainty. 'Fixed as fate' is hubris disguised as conviction. He's reassuring Margaret — but also reassuring himself. Notice the shift: in the previous paragraphs he was emotionally open; now he's armored again. Read 'I shall do nothing rashly' as a promise he will break." },
+        "D9.P27": { items: [ { name: "Ancient Mariner", column: "entity", type: "Lore", depth: 1.0, desc: "Reference to Samuel Taylor Coleridge's poem, highlighting the peril and supernatural dread of sea voyages.", phrases: ["Ancient Mariner"] }, { name: "Allusion", column: "word", type: "Universal", depth: 0.2, desc: "An expression designed to call something to mind without mentioning it explicitly.", phrases: ["allusion"] }, { name: "Perseverance", column: "word", type: "Universal", depth: 0.15, desc: "Persistence in doing something despite difficulty or delay in achieving success.", phrases: ["perseverance"] }, { name: "Kill no albatross", column: "idiom", type: "Lore", depth: 1.0, desc: "A promise not to bring a curse upon the voyage — directly referencing Coleridge's tale of fatal hubris at sea.", phrases: ["kill no albatross"] } ], intuition: "This paragraph is where Walton's Romanticism is most naked. He references Coleridge — a poet who wrote about the consequences of transgressing nature — and then immediately says he himself is driven by 'the marvellous.' The irony is sharp: he promises not to kill an albatross while describing impulses that make him exactly the kind of person who would. Shelley is laying the thematic groundwork for the entire novel here." },
+        "D9.P28": { items: [ { name: "Africa", column: "entity", type: "Universal", depth: 0.15, desc: "The continent whose southern cape marks a possible return route.", phrases: ["Africa"] }, { name: "America", column: "entity", type: "Universal", depth: 0.15, desc: "The continent whose southern cape marks an alternative return route.", phrases: ["America"] }, { name: "Traversed", column: "word", type: "Universal", depth: 0.2, desc: "Traveled across or through; implies a complete crossing of a vast distance.", phrases: ["traversed"] }, { name: "Reverse of the picture", column: "idiom", type: "Contextual", depth: 0.6, desc: "The opposite or negative possible outcome — the dark underside of hope.", phrases: ["reverse of the picture"] } ], intuition: "The closing is tender and fearful in equal measure. 'Remember me with affection, should you never hear from me again' — this is a man writing what might be his last words to his sister. The bravado of the previous paragraphs dissolves into vulnerability. Note 'the reverse of the picture' — Walton knows the dark outcome exists but cannot bring himself to look at it directly. This emotional evasion will define his response to Victor's story." }
+    };
+
+    const userdata = {
+        reflections: { "__aru__": [], "D9.P22": [], "D9.P23": [], "D9.P24": [], "D9.P25": [], "D9.P26": [], "D9.P27": [], "D9.P28": [] },
+        bookmarks: []
+    };
+
+    const contextData = {
+        local: { summary: "Walton has successfully reached Archangel and is executing his plan to hire a vessel and crew for the polar expedition. He is battling feelings of severe isolation as he prepares for departure.", entities: [ { name: "Robert Walton", tag: "history", desc: "Captain of the expedition." }, { name: "Mrs. Saville / Margaret", tag: "history", desc: "Walton's sister in England." }, { name: "Archangel", tag: "history", desc: "The Russian port city." }, { name: "Uncle Thomas", tag: "history", desc: "Walton's uncle whose library fueled his passions." }, { name: "The Lieutenant", tag: "new", desc: "An ambitious English officer hired for the voyage." }, { name: "The Master", tag: "new", desc: "A gentle ship master with a tragic romantic past." } ] },
+        global: { paragraphs: [ "Robert Walton, an ambitious explorer, has set out on a perilous journey to the North Pole to discover a northern passage and uncover the secrets of magnetism. After years of rigorous physical and mental preparation — following a failed attempt at becoming a poet — he arrived in St. Petersburgh. Filled with unwavering optimism and driven by childhood dreams, he detailed his plans to his sister, Mrs. Saville, before departing for Archangel to secure a ship and crew.", "In his second letter from Archangel, Walton reveals a deep loneliness and a craving for intellectual companionship. He has assembled a crew — including a noble but uneducated lieutenant and a gentle ship master with a tragic romantic history — but none can fill the void of a true friend. His resolutions remain firm despite the harsh winter, and he awaits spring to begin his voyage into the unknown." ] }
+    };
+
+    const navigation = { previousAru: "PreviousARU.html", nextAru: "NextARU.html" };
+
+    let currentAtu = null;
+    let currentAtuLineage = null;
+    let activeTab = 'reflection';
+    let currentView = 'reading'; 
+    let fadeBackTimer = null;
+    let hadReflectionText = false;
+    let expandedAtuGroups = new Set();
+    
+    // Context State Machine: 0 = None, 1 = Local, 2 = Global
+    let activeContextLevel = 0; 
+
+    // Touch physics state
+    let longPressTimer;
+    let pressStartX = 0;
+    let pressStartY = 0;
+    let touchStartTime = 0;
+    let isDragging = false;
+    let pullState = null;
+    let pullDistance = 0;
+    let wasAtTop = false;
+    let wasAtBottom = false;
+
+    const PULL_THRESHOLD = 80;
+    const SWIPE_THRESHOLD = 80;
+    const RUBBER_BAND_RESISTANCE = 0.4;
+    // #endregion
+
+    // #region Helpers
+    /*
+     * Determines the appropriate CSS class for depth mapping.
+     */
+    function depthClass(d) {
+        if (d >= 0.8) return 'd-lore';
+        if (d >= 0.5) return 'd-contextual';
+        return 'd-universal';
+    }
+
+    /*
+     * Escapes a string to be safely used within a regular expression.
+     */
+    function escapeRegex(s) { 
+        return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); 
+    }
+
+    /*
+     * Checks if the reading surface is scrolled near the absolute bottom.
+     */
+    function isNearBottom() {
+        return (window.innerHeight + window.scrollY) >= Math.max(document.body.scrollHeight, document.documentElement.scrollHeight) - 50;
+    }
+    // #endregion
+
+    // #region Initialization
+    /*
+     * Entry point to boot the application and setup event listeners.
+     */
+    function init() {
+        wrapSentences();
+        buildProgressDots();
+        attachScrollListener();
+        attachReadingGestures();
+        populateInPageContext();
+        attachReflectionPageGestures();
+    }
+
+    window.onload = init;
+    // #endregion
+
+    // #region DOM Preparation
+    /*
+     * Wraps all standard prose paragraphs into segmented sentence spans.
+     */
+    function wrapSentences() {
+        document.querySelectorAll('.atu').forEach(atu => {
+            if (atu.classList.contains('is-header') || atu.classList.contains('is-signature')) return;
+            const html = atu.innerHTML;
+            const sentences = html.match(/[^.!?]+[.!?"]+[\s]*/g) || [html];
+            atu.innerHTML = sentences.map(s => `<span class="sentence">${s}</span>`).join('');
+        });
+    }
+
+    /*
+     * Builds the visual progress dot elements dynamically.
+     */
+    function buildProgressDots() {
+        const bar = document.getElementById('progress-bar');
+        document.querySelectorAll('.atu').forEach(() => {
+            const d = document.createElement('div');
+            d.className = 'progress-dot';
+            bar.appendChild(d);
+        });
+        updateProgressDots();
+    }
+
+    let progressTimer;
+    /*
+     * Calculates which ATU is currently visible and highlights the corresponding dot.
+     */
+    function updateProgressDots() {
+        const dots = document.querySelectorAll('.progress-dot');
+        const atus = document.querySelectorAll('.atu');
+        const vh = window.innerHeight;
+        atus.forEach((atu, i) => {
+            const r = atu.getBoundingClientRect();
+            dots[i].classList.toggle('active', r.top < vh * 0.7 && r.bottom > vh * 0.2);
+        });
+    }
+
+    /*
+     * Attaches an optimized scroll listener to trigger progress dot visibility.
+     */
+    function attachScrollListener() {
+        window.addEventListener('scroll', () => {
+            if (currentView !== 'reading') return;
+            document.getElementById('progress-bar').classList.add('visible');
+            updateProgressDots();
+            clearTimeout(progressTimer);
+            progressTimer = setTimeout(() => document.getElementById('progress-bar').classList.remove('visible'), 1200);
+        }, { passive: true });
+    }
+
+    /*
+     * Seeds initial knowledge datasets into the hidden DOM context elements.
+     */
+    function populateInPageContext() {
+        document.getElementById('context-local-summary').textContent = contextData.local.summary;
+        const entityList = document.getElementById('context-local-entities');
+        contextData.local.entities.forEach(ent => {
+            const li = document.createElement('li');
+            li.innerHTML = `<span class="entity-name">${ent.name}</span><span class="entity-tag ${ent.tag}">${ent.tag === 'history' ? 'History' : 'New'}</span><br>${ent.desc}`;
+            entityList.appendChild(li);
+        });
+
+        const globalDiv = document.getElementById('context-global-paragraphs');
+        contextData.global.paragraphs.forEach(p => {
+            const el = document.createElement('p');
+            el.className = 'context-prose';
+            el.textContent = p;
+            globalDiv.appendChild(el);
+        });
+    }
+    // #endregion
+
+    // #region Main Reading Gestures
+    /*
+     * Binds touch interactions for swipe, pull, and tap mechanics.
+     */
+    function attachReadingGestures() {
+        const surface = document.getElementById('reading-surface');
+        surface.addEventListener('touchstart', handleReadingTouchStart, { passive: false });
+        surface.addEventListener('touchmove', handleReadingTouchMove, { passive: false });
+        surface.addEventListener('touchend', handleReadingTouchEnd);
+        surface.addEventListener('touchcancel', resetGestureState);
+    }
+
+    /*
+     * Handles the start of a touch interaction on the reading surface.
+     * Steps:
+     * 1. Record X/Y origin and exact system timestamp.
+     * 2. Verify strict top-of-document constraint for pull logic.
+     * 3. Evaluate if target is a valid ATU to begin a 600ms long-press timer.
+     */
+    function handleReadingTouchStart(e) {
+        if (currentView !== 'reading') return;
+        isDragging = false;
+        pressStartX = e.touches[0].clientX;
+        pressStartY = e.touches[0].clientY;
+        touchStartTime = Date.now();
+        pullDistance = 0;
+        pullState = null;
+        
+        wasAtTop = window.scrollY <= 0;
+        wasAtBottom = isNearBottom();
+
+        const surface = document.getElementById('reading-surface');
+        surface.classList.remove('pulling');
+
+        const atu = e.target.closest('.atu');
+        if (atu && !atu.classList.contains('is-header') && !atu.classList.contains('is-signature')) {
+            currentAtu = atu;
+            currentAtuLineage = atu.getAttribute('data-opus-lineage');
+            const rect = atu.getBoundingClientRect();
+            atu.style.setProperty('--press-x', ((pressStartX - rect.left) / rect.width * 100) + '%');
+            atu.style.setProperty('--press-y', ((pressStartY - rect.top) / rect.height * 100) + '%');
+
+            longPressTimer = setTimeout(() => {
+                if (!isDragging && !pullState) {
+                    atu.classList.remove('pressing');
+                    openSidecar(atu);
+                }
+            }, 600);
+
+            setTimeout(() => { if (!isDragging && !pullState) atu.classList.add('pressing'); }, 100);
+        }
+    }
+
+    /*
+     * **COMPLEX FUNCTION**
+     * Handles touch movement on the reading surface, calculating rubber-band physics.
+     * Steps:
+     * 1. Calculate X/Y distance and cancel long-press if it's a drag.
+     * 2. If at strict top and context allows, calculate pull elasticity logic.
+     * 3. Apply raw CSS translateY to visually mimic document stretching.
+     * 4. Intercept the native scroll event using preventDefault().
+     * 5. Sync the UI pull indicators utilizing the scaled visual Y distance.
+     */
+    function handleReadingTouchMove(e) {
+        if (currentView !== 'reading') return;
+        const touch = e.touches[0];
+        const dy = touch.clientY - pressStartY;
+        const dx = touch.clientX - pressStartX;
+
+        if (Math.abs(dy) > 10 || Math.abs(dx) > 10) {
+            isDragging = true;
+            clearTimeout(longPressTimer);
+            document.querySelectorAll('.atu.pressing').forEach(a => a.classList.remove('pressing'));
+        }
+
+        const atTop = wasAtTop && window.scrollY <= 0;
+        const atBottom = wasAtBottom || isNearBottom();
+        const surface = document.getElementById('reading-surface');
+
+        // Top Pull (Context injection)
+        if (atTop && dy > 0 && activeContextLevel < 2) {
+            if (e.cancelable) e.preventDefault(); 
+            pullState = 'top';
+            pullDistance = dy;
+            
+            const visualY = dy * RUBBER_BAND_RESISTANCE;
+            surface.classList.add('pulling');
+            surface.style.transform = `translateY(${visualY}px)`;
+
+            const nextContext = activeContextLevel === 0 ? 'local' : 'global';
+            updatePullIndicator('pull-indicator-top', 'pull-top-text', visualY, `Release for ${nextContext} context`, `Pull for ${nextContext} context`);
+        } 
+        // Bottom Pull (Reflection Page)
+        else if (atBottom && dy < 0) {
+            if (e.cancelable) e.preventDefault(); 
+            pullState = 'bottom';
+            pullDistance = Math.abs(dy);
+            
+            const visualY = dy * RUBBER_BAND_RESISTANCE; 
+            surface.classList.add('pulling');
+            surface.style.transform = `translateY(${visualY}px)`; // Negative Y translates up
+
+            updatePullIndicator('pull-indicator-bottom', 'pull-bottom-text', pullDistance * RUBBER_BAND_RESISTANCE, 'Release to reflect', 'Pull to reflect');
+        }
+    }
+
+    /*
+     * **COMPLEX FUNCTION**
+     * Concludes the touch event on the reading surface and resolves gestures.
+     * Steps:
+     * 1. Clean up lingering visual states (timers, press classes).
+     * 2. Clear the rubber-band CSS transform to allow the native CSS transition snap-back.
+     * 3. Route gesture intent (Context injection, Navigation, Reflection page).
+     * 4. If duration was < 600ms and no drag/pull occurred, trigger sentence highlight toggle.
+     * 5. Reset all active gesture states tracking.
+     */
+    function handleReadingTouchEnd(e) {
+        if (currentView !== 'reading') return;
+        clearTimeout(longPressTimer);
+        document.querySelectorAll('.atu.pressing').forEach(a => a.classList.remove('pressing'));
+
+        const dx = e.changedTouches[0].clientX - pressStartX;
+        const dy = e.changedTouches[0].clientY - pressStartY;
+        const touchDuration = Date.now() - touchStartTime;
+
+        const surface = document.getElementById('reading-surface');
+        surface.classList.remove('pulling');
+        surface.style.transform = ''; // Initiates CSS transition snap-back
+
+        const visualTopPull = pullState === 'top' ? pullDistance * RUBBER_BAND_RESISTANCE : 0;
+        const visualBottomPull = pullState === 'bottom' ? pullDistance * RUBBER_BAND_RESISTANCE : 0;
+
+        // Resolve top pull
+        if (pullState === 'top' && visualTopPull > PULL_THRESHOLD) {
+            if (activeContextLevel === 0) {
+                document.getElementById('in-page-context-local').classList.remove('hidden');
+                activeContextLevel = 1;
+            } else if (activeContextLevel === 1) {
+                document.getElementById('in-page-context-global').classList.remove('hidden');
+                activeContextLevel = 2;
+            }
+        } 
+        // Resolve bottom pull
+        else if (pullState === 'bottom' && visualBottomPull > PULL_THRESHOLD) {
+            openReflectionPage();
+        }
+        // Resolve horizontal swipe
+        else if (Math.abs(dx) > SWIPE_THRESHOLD && Math.abs(dx) > Math.abs(dy) * 1.5 && !pullState) {
+            if (dx < 0 && navigation.nextAru) {
+                window.location.href = navigation.nextAru;
+            } else if (dx > 0 && navigation.previousAru) {
+                window.location.href = navigation.previousAru;
+            }
+        }
+        // Short tap constraint check
+        else if (!isDragging && !pullState && touchDuration < 600) {
+            const sentence = e.target.closest('.sentence');
+            if (sentence) sentence.classList.toggle('highlighted');
+        }
+
+        hidePullIndicators();
+        resetGestureState();
+    }
+
+    /*
+     * Resets the structural data for gesture evaluation.
+     */
+    function resetGestureState() {
+        pullState = null; 
+        pullDistance = 0; 
+        wasAtTop = false; 
+        wasAtBottom = false;
+    }
+
+    /*
+     * Syncs a pull indicator element with current gesture physics.
+     */
+    function updatePullIndicator(elementId, textId, distance, readyText, pullText) {
+        const ind = document.getElementById(elementId);
+        ind.classList.add('visible');
+        ind.classList.toggle('ready', distance > PULL_THRESHOLD);
+        document.getElementById(textId).textContent = distance > PULL_THRESHOLD ? readyText : pullText;
+    }
+
+    /*
+     * Forces all pull indicators to a hidden state.
+     */
+    function hidePullIndicators() {
+        document.getElementById('pull-indicator-top').classList.remove('visible', 'ready');
+        document.getElementById('pull-indicator-bottom').classList.remove('visible', 'ready');
+    }
+    // #endregion
+
+    // #region Sidecar Management
+    /*
+     * Opens the sidecar UI and initiates the markup generation for terms.
+     */
+    function openSidecar(atu) {
+        currentAtu = atu;
+        currentAtuLineage = atu.getAttribute('data-opus-lineage');
+        const data = knowledgeDb[currentAtuLineage];
+
+        const html = buildSidecarSourceHtml(atu.textContent, data);
+        document.getElementById('sidecar-text').innerHTML = html;
+
+        switchTab('reflection');
+        renderReflections();
+        resetDefinition();
+        resetIntuition();
+
+        const overlay = document.getElementById('sidecar-overlay');
+        overlay.style.display = 'flex';
+        requestAnimationFrame(() => { overlay.classList.add('active'); });
+
+        const ta = document.getElementById('ref-textarea');
+        ta.value = '';
+        ta.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 80) + 'px';
+        });
+    }
+
+    /*
+     * Computes the final HTML string containing interactive knowledge items.
+     */
+    function buildSidecarSourceHtml(rawText, data) {
+        let html = rawText;
+        if (!data || data.items.length === 0) return html;
+
+        const sorted = [...data.items].sort((a, b) =>
+            Math.max(...b.phrases.map(p => p.length)) - Math.max(...a.phrases.map(p => p.length))
+        );
+
+        const placeholders = [];
+        sorted.forEach((item, idx) => {
+            item.phrases.forEach(phrase => {
+                const regex = new RegExp(`\\b(${escapeRegex(phrase)})\\b`, 'gi');
+                html = html.replace(regex, match => {
+                    const ph = `__PH${placeholders.length}__`;
+                    const tc = item.column === 'entity' ? 't-entity' : item.column === 'word' ? 't-word' : 't-idiom';
+                    const dc = depthClass(item.depth);
+                    placeholders.push(`<span class="cw ${tc} ${dc}" data-idx="${idx}" onclick="onWordTap(this, ${idx})">${match}</span>`);
+                    return ph;
+                });
+            });
+        });
+
+        placeholders.forEach((r, i) => { 
+            html = html.replaceAll(`__PH${i}__`, r); 
+        });
+
+        return html;
+    }
+
+    /*
+     * Triggers sidecar tear down sequence.
+     */
+    function closeSidecar() {
+        clearFadeBack();
+        const overlay = document.getElementById('sidecar-overlay');
+        overlay.classList.remove('active');
+        setTimeout(() => { overlay.style.display = 'none'; }, 350);
+    }
+    // #endregion
+
+    // #region Tab Management
+    /*
+     * Orchestrates visual swapping between sidecar tool tabs.
+     */
+    function switchTab(tab) {
+        activeTab = tab;
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === `panel-${tab}`));
+
+        if (tab === 'intuition') generateIntuition();
+        clearFadeBack();
+    }
+
+    /*
+     * Handles tap interactions on knowledge terms within the sidecar.
+     */
+    function onWordTap(el, idx) {
+        if (!currentAtuLineage) return;
+        const data = knowledgeDb[currentAtuLineage];
+        if (!data) return;
+
+        const sorted = [...data.items].sort((a, b) =>
+            Math.max(...b.phrases.map(p => p.length)) - Math.max(...a.phrases.map(p => p.length))
+        );
+        const item = sorted[idx];
+        if (!item) return;
+
+        document.querySelectorAll('#sidecar-text .cw.selected').forEach(w => w.classList.remove('selected'));
+        el.classList.add('selected');
+
+        const refTextarea = document.getElementById('ref-textarea');
+        hadReflectionText = refTextarea && refTextarea.value.trim().length > 0;
+
+        const colorMap = {
+            entity: { bg: 'var(--blue-light)', color: 'var(--blue-deep)' },
+            word: { bg: 'var(--yellow-light)', color: 'var(--yellow-deep)' },
+            idiom: { bg: 'var(--green-light)', color: 'var(--green-deep)' }
+        };
+        const c = colorMap[item.column] || colorMap.word;
+
+        document.getElementById('def-content').innerHTML = `
+            <div class="def-content">
+                <div class="def-word">${item.name}</div>
+                <div class="def-type-badge" style="background:${c.bg}; color:${c.color}">${item.type} · ${item.column}</div>
+                <div class="def-meaning">${item.desc}</div>
+            </div>`;
+
+        switchTab('definition');
+        if (hadReflectionText) startFadeBack();
+    }
+
+    /*
+     * Initializes the UX timer routing users back to the reflection tab.
+     */
+    function startFadeBack() {
+        clearFadeBack();
+        document.getElementById('reflect-fade-ring').classList.add('pulsing');
+
+        const bar = document.getElementById('def-fade-bar');
+        bar.classList.remove('counting');
+        bar.offsetHeight; 
+        bar.classList.add('counting');
+
+        fadeBackTimer = setTimeout(() => {
+            clearFadeBack();
+            switchTab('reflection');
+            setTimeout(() => {
+                const ta = document.getElementById('ref-textarea');
+                if (ta) ta.focus();
+            }, 700);
+        }, 5000);
+
+        const panel = document.getElementById('panel-definition');
+        panel.addEventListener('pointerdown', killFadeBack, { once: true });
+    }
+
+    /*
+     * Kills the active fade-back timer manually via user interrupt.
+     */
+    function killFadeBack() {
+        clearFadeBack();
+    }
+
+    /*
+     * Resets structural attributes related to the fade-back mechanic.
+     */
+    function clearFadeBack() {
+        if (fadeBackTimer) { clearTimeout(fadeBackTimer); fadeBackTimer = null; }
+        document.getElementById('reflect-fade-ring').classList.remove('pulsing');
+        const bar = document.getElementById('def-fade-bar');
+        bar.classList.remove('counting');
+        const panel = document.getElementById('panel-definition');
+        panel.removeEventListener('pointerdown', killFadeBack);
+    }
+
+    /*
+     * Resets visual structure for the Definition panel empty state.
+     */
+    function resetDefinition() {
+        document.getElementById('def-content').innerHTML = '<div class="def-empty">Tap a highlighted word above to see its meaning</div>';
+        clearFadeBack();
+    }
+
+    /*
+     * Populates the Intuition tab utilizing predefined reading guides.
+     */
+    function generateIntuition() {
+        if (!currentAtuLineage) return;
+        const data = knowledgeDb[currentAtuLineage];
+        const container = document.getElementById('intuition-content');
+        
+        if (!data || !data.intuition) {
+            container.innerHTML = '<div class="intuition-placeholder">No reading guide available for this paragraph.</div>';
+            return;
+        }
+
+        container.innerHTML = `
+            <div class="intuition-content">
+                <div class="intuition-label">Reading Guide</div>
+                <div class="intuition-text">${data.intuition}</div>
+            </div>`;
+    }
+
+    /*
+     * Resets visual structure for the Intuition panel empty state.
+     */
+    function resetIntuition() {
+        document.getElementById('intuition-content').innerHTML =
+            '<div class="intuition-placeholder">Tap to receive a reading guide for this paragraph</div>';
+    }
+    // #endregion
+
+    // #region Sidecar Reflections
+    /*
+     * Builds and appends existing notes into the sidecar reflection UI.
+     */
+    function renderReflections() {
+        const list = document.getElementById('ref-notes-list');
+        if (!list || !currentAtuLineage) return;
+
+        const notes = userdata.reflections[currentAtuLineage] || [];
+        list.innerHTML = '';
+        notes.forEach((note, i) => {
+            const div = document.createElement('div');
+            div.className = 'ref-note';
+            div.innerHTML = `
+                <span class="ref-note-text">\u201C${note}\u201D</span>
+                <div class="ref-note-actions">
+                    <span onclick="deleteReflection(${i})">\u00D7</span>
+                </div>`;
+            list.appendChild(div);
+        });
+    }
+
+    /*
+     * Appends a new sidecar reflection to the dataset and initiates a re-render.
+     */
+    function saveReflection() {
+        const ta = document.getElementById('ref-textarea');
+        if (!ta || !currentAtuLineage) return;
+        const val = ta.value.trim();
+        if (!val) return;
+
+        if (!userdata.reflections[currentAtuLineage]) userdata.reflections[currentAtuLineage] = [];
+        userdata.reflections[currentAtuLineage].push(val);
+
+        ta.value = '';
+        ta.style.height = 'auto';
+        renderReflections();
+    }
+
+    /*
+     * Removes an isolated sidecar reflection from the dataset based on index.
+     */
+    function deleteReflection(idx) {
+        if (!currentAtuLineage) return;
+        if (userdata.reflections[currentAtuLineage]) {
+            userdata.reflections[currentAtuLineage].splice(idx, 1);
+            renderReflections();
+        }
+    }
+    // #endregion
+
+    // #region Reflection Page Implementation
+    /*
+     * Transforms the master viewport into the reflection context page.
+     */
+    function openReflectionPage() {
+        currentView = 'reflection';
+        document.getElementById('reading-surface').classList.add('hidden');
+        document.getElementById('progress-bar').classList.remove('visible');
+        document.getElementById('reflection-page').classList.remove('hidden');
+        populateReflectionPage();
+    }
+
+    /*
+     * Reverts master viewport back to the core reading experience.
+     */
+    function closeReflectionPage() {
+        currentView = 'reading';
+        document.getElementById('reflection-page').classList.add('hidden');
+        document.getElementById('reading-surface').classList.remove('hidden');
+    }
+
+    /*
+     * Central execution pipeline to build the reflection page structure.
+     */
+    function populateReflectionPage() {
+        renderAruReflections();
+        renderAtuReflections();
+    }
+
+    /*
+     * Builds and inserts global (ARU-level) reflections into DOM view.
+     */
+    function renderAruReflections() {
+        const aruSection = document.getElementById('rp-aru-section');
+        aruSection.innerHTML = '';
+        const aruNotes = userdata.reflections['__aru__'] || [];
+        aruNotes.forEach((note, i) => {
+            const card = document.createElement('div');
+            card.className = 'rp-aru-card';
+            card.innerHTML = `
+                <div class="rp-aru-card-label">Session Reflection</div>
+                <div class="rp-aru-card-note" id="rp-aru-note-${i}">${note}</div>
+                <div class="rp-aru-card-actions" id="rp-aru-actions-${i}">
+                    <span onclick="editAruNote(${i})">Edit</span>
+                    <span onclick="deleteAruNote(${i})">Delete</span>
+                </div>`;
+            aruSection.appendChild(card);
+        });
+    }
+
+    /*
+     * Scrapes reading layout and builds nested (ATU-level) reflections.
+     */
+    function renderAtuReflections() {
+        const atuSection = document.getElementById('rp-atu-section');
+        atuSection.innerHTML = '';
+        const atus = document.querySelectorAll('.atu');
+        let hasAtuNotes = false;
+
+        atus.forEach(atu => {
+            if (atu.classList.contains('is-header') || atu.classList.contains('is-signature')) return;
+            const lineage = atu.getAttribute('data-opus-lineage');
+            const notes = userdata.reflections[lineage];
+            if (!notes || !notes.length) return;
+
+            hasAtuNotes = true;
+            const firstSentence = (atu.textContent.match(/[^.!?]+[.!?"]+/) || [atu.textContent.substring(0, 80)])[0].trim();
+
+            const group = document.createElement('div');
+            group.className = 'rp-atu-group';
+            group.setAttribute('data-lineage', lineage);
+            
+            if (expandedAtuGroups.has(lineage)) group.classList.add('expanded');
+
+            let notesHtml = '';
+            notes.forEach((note, i) => {
+                notesHtml += `<div class="rp-atu-note" id="rp-atu-note-${lineage}-${i}">
+                    <span class="rp-atu-note-text">\u201C${note}\u201D</span>
+                    <div class="rp-atu-note-actions">
+                        <span onclick="editAtuNote('${lineage}', ${i}); event.stopPropagation();">Edit</span>
+                        <span onclick="deleteAtuNote('${lineage}', ${i}); event.stopPropagation();">Del</span>
+                    </div></div>`;
+            });
+
+            group.innerHTML = `
+                <div class="rp-atu-header" onclick="toggleAtuGroup(this.parentElement)">
+                    <span class="rp-atu-snippet">${firstSentence}</span>
+                    <span class="rp-atu-count">${notes.length}</span>
+                    <span class="rp-atu-chevron">\u203A</span>
+                </div>
+                <div class="rp-atu-body">
+                    <div class="rp-atu-full-text">${atu.textContent}</div>
+                    ${notesHtml}
+                </div>`;
+            atuSection.appendChild(group);
+        });
+
+        if (!hasAtuNotes) atuSection.innerHTML = '<div class="rp-empty">No paragraph reflections yet\u2026</div>';
+    }
+
+    /*
+     * Expands an ATU group and archives state to prevent collapse on re-render.
+     */
+    function toggleAtuGroup(group) {
+        group.classList.toggle('expanded');
+        const lineage = group.getAttribute('data-lineage');
+        if (group.classList.contains('expanded')) {
+            expandedAtuGroups.add(lineage);
+        } else {
+            expandedAtuGroups.delete(lineage);
+        }
+    }
+
+    /*
+     * Pushes new top-level ARU reflection string into data stack.
+     */
+    function saveAruReflection() {
+        const ta = document.getElementById('rp-aru-textarea');
+        const val = ta.value.trim();
+        if (!val) return;
+        userdata.reflections['__aru__'].push(val);
+        ta.value = '';
+        populateReflectionPage();
+    }
+
+    /*
+     * Triggers inline edit mode for an ARU reflection.
+     */
+    function editAruNote(idx) {
+        const noteEl = document.getElementById(`rp-aru-note-${idx}`);
+        const actionsEl = document.getElementById(`rp-aru-actions-${idx}`);
+        if (!noteEl) return;
+        const currentText = userdata.reflections['__aru__'][idx];
+        noteEl.innerHTML = `<div class="rp-edit-row">
+            <textarea class="ref-textarea" id="rp-aru-edit-ta-${idx}" rows="1">${currentText}</textarea>
+            <button class="ref-save-btn" onclick="saveAruEdit(${idx})">Save</button>
+        </div>`;
+        actionsEl.style.display = 'none';
+        document.getElementById(`rp-aru-edit-ta-${idx}`).focus();
+    }
+
+    /*
+     * Saves changes to an ARU reflection or deletes if emptied.
+     */
+    function saveAruEdit(idx) {
+        const ta = document.getElementById(`rp-aru-edit-ta-${idx}`);
+        const val = ta.value.trim();
+        if (!val) {
+            userdata.reflections['__aru__'].splice(idx, 1);
+        } else {
+            userdata.reflections['__aru__'][idx] = val;
+        }
+        populateReflectionPage();
+    }
+
+    /*
+     * Removes ARU reflection node logically and visually.
+     */
+    function deleteAruNote(idx) {
+        userdata.reflections['__aru__'].splice(idx, 1);
+        populateReflectionPage();
+    }
+
+    /*
+     * Triggers inline edit mode for an ATU reflection.
+     */
+    function editAtuNote(lineage, idx) {
+        const noteEl = document.getElementById(`rp-atu-note-${lineage}-${idx}`);
+        if (!noteEl) return;
+        const currentText = userdata.reflections[lineage][idx];
+        noteEl.innerHTML = `<div class="rp-edit-row">
+            <textarea class="ref-textarea" id="rp-atu-edit-ta-${lineage}-${idx}" rows="1">${currentText}</textarea>
+            <button class="ref-save-btn" onclick="saveAtuEdit('${lineage}', ${idx})">Save</button>
+        </div>`;
+        document.getElementById(`rp-atu-edit-ta-${lineage}-${idx}`).focus();
+    }
+
+    /*
+     * Saves changes to an ATU reflection or deletes if emptied.
+     */
+    function saveAtuEdit(lineage, idx) {
+        const ta = document.getElementById(`rp-atu-edit-ta-${lineage}-${idx}`);
+        const val = ta.value.trim();
+        if (!val) {
+            userdata.reflections[lineage].splice(idx, 1);
+        } else {
+            userdata.reflections[lineage][idx] = val;
+        }
+        populateReflectionPage();
+    }
+
+    /*
+     * Removes ATU reflection node logically and visually.
+     */
+    function deleteAtuNote(lineage, idx) {
+        userdata.reflections[lineage].splice(idx, 1);
+        populateReflectionPage();
+    }
+
+    /*
+     * Connects touch gestures applied explicitly while in the Reflection Page.
+     */
+    function attachReflectionPageGestures() {
+        const page = document.getElementById('reflection-page');
+        let startY = 0;
+        let pulling = false;
+        let pullDir = null;
+        let dist = 0;
+
+        page.addEventListener('touchstart', e => {
+            if (currentView !== 'reflection') return;
+            startY = e.touches[0].clientY;
+            pulling = false;
+            pullDir = null;
+            dist = 0;
+        }, { passive: true });
+
+        page.addEventListener('touchmove', e => {
+            if (currentView !== 'reflection') return;
+            const dy = e.touches[0].clientY - startY;
+            if (Math.abs(dy) > 15) pulling = true;
+
+            if (page.scrollTop < 5 && dy > 20) {
+                if (e.cancelable) e.preventDefault();
+                pullDir = 'top';
+                dist = dy;
+                updatePullIndicator('pull-indicator-top', 'pull-top-text', dy, 'Release to return', 'Pull to return');
+            } else if (isReflectionNearBottom() && dy < -20) {
+                if (e.cancelable) e.preventDefault();
+                pullDir = 'bottom';
+                dist = Math.abs(dy);
+                updatePullIndicator('pull-indicator-bottom', 'pull-bottom-text', dist, 'Release for next ARU', 'Pull for next ARU');
+            }
+        }, { passive: false });
+
+        page.addEventListener('touchend', () => {
+            if (pullDir === 'top' && dist > PULL_THRESHOLD) {
+                closeReflectionPage();
+            } else if (pullDir === 'bottom' && dist > PULL_THRESHOLD && navigation.nextAru) {
+                window.location.href = navigation.nextAru;
+            }
+            hidePullIndicators();
+            pulling = false; pullDir = null; dist = 0;
+        });
+    }
+    // #endregion
+</script>
+</body>
+</html>
