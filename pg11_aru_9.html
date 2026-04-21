@@ -1880,6 +1880,7 @@
 
     let pinchStartDist = 0;
     let pinchProcessed = false;
+    let isPinching = false;
 
     const PULL_THRESHOLD = 80;
     const SWIPE_THRESHOLD = 80;
@@ -2033,6 +2034,12 @@
         wasAtTop = window.scrollY <= 0;
         wasAtBottom = isNearBottom();
 
+        if (e.touches.length > 1) {
+            isPinching = true;
+            clearTimeout(longPressTimer);
+            document.querySelectorAll('.atu.pressing').forEach(a => a.classList.remove('pressing'));
+        }
+
         if (e.touches.length === 2) {
             const dx = e.touches[0].clientX - e.touches[1].clientX;
             const dy = e.touches[0].clientY - e.touches[1].clientY;
@@ -2120,21 +2127,8 @@
         const atBottom = wasAtBottom || isNearBottom();
         const surface = document.getElementById('reading-surface');
 
-        // Top Pull (Context injection)
-        if (atTop && dy > 0 && activeContextLevel < 2) {
-            if (e.cancelable) e.preventDefault(); 
-            pullState = 'top';
-            pullDistance = dy;
-            
-            const visualY = dy * RUBBER_BAND_RESISTANCE;
-            surface.classList.add('pulling');
-            surface.style.transform = `translateY(${visualY}px)`;
-
-            const nextContext = activeContextLevel === 0 ? 'local' : 'global';
-            updatePullIndicator('pull-indicator-top', 'pull-top-text', visualY, `Release for ${nextContext} context`, `Pull for ${nextContext} context`);
-        } 
         // Bottom Pull (Reflection Page)
-        else if (atBottom && dy < 0) {
+        if (atBottom && dy < 0) {
             if (e.cancelable) e.preventDefault(); 
             pullState = 'bottom';
             pullDistance = Math.abs(dy);
@@ -2170,25 +2164,14 @@
         surface.classList.remove('pulling');
         surface.style.transform = ''; // Initiates CSS transition snap-back
 
-        const visualTopPull = pullState === 'top' ? pullDistance * RUBBER_BAND_RESISTANCE : 0;
         const visualBottomPull = pullState === 'bottom' ? pullDistance * RUBBER_BAND_RESISTANCE : 0;
 
-        // Resolve top pull
-        if (pullState === 'top' && visualTopPull > PULL_THRESHOLD) {
-            if (activeContextLevel === 0) {
-                document.getElementById('in-page-context-local').classList.remove('hidden');
-                activeContextLevel = 1;
-            } else if (activeContextLevel === 1) {
-                document.getElementById('in-page-context-global').classList.remove('hidden');
-                activeContextLevel = 2;
-            }
-        } 
         // Resolve bottom pull
-        else if (pullState === 'bottom' && visualBottomPull > PULL_THRESHOLD) {
+        if (pullState === 'bottom' && visualBottomPull > PULL_THRESHOLD) {
             openReflectionPage();
         }
         // Resolve horizontal swipe
-        else if (Math.abs(dx) > SWIPE_THRESHOLD && Math.abs(dx) > Math.abs(dy) * 1.5 && !pullState) {
+        else if (!isPinching && Math.abs(dx) > SWIPE_THRESHOLD && Math.abs(dx) > Math.abs(dy) * 1.5 && !pullState) {
             if (dx < 0 && navigation.nextAru) {
                 window.location.href = navigation.nextAru;
             } else if (dx > 0 && navigation.previousAru) {
@@ -2196,9 +2179,13 @@
             }
         }
         // Short tap constraint check
-        else if (!isDragging && !pullState && touchDuration < 600) {
+        else if (!isPinching && !isDragging && !pullState && touchDuration < 600) {
             const sentence = e.target.closest('.sentence');
             if (sentence) sentence.classList.toggle('highlighted');
+        }
+
+        if (e.touches.length === 0) {
+            isPinching = false;
         }
 
         hidePullIndicators();
