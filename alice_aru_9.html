@@ -1,0 +1,2698 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Octopus Reading Engine — Inline Variant</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Inter:wght@300;400;500;600&display=swap');
+
+        :root {
+            --bg: #FAF8F5;
+            --ink: #1C1917;
+            --ink-soft: #57534E;
+            --ink-ghost: #A8A29E;
+            --highlight: rgba(180, 160, 120, 0.15);
+            --highlight-active: rgba(180, 160, 120, 0.28);
+            --rule: rgba(0, 0, 0, 0.06);
+
+            --blue-deep: #1E3A5F;
+            --blue-mid: #4A7FB5;
+            --blue-pale: #A8CCE8;
+            --blue-light: #D6E8F7;
+            --blue-ghost: #EBF3FA;
+
+            --yellow-deep: #5C4E00;
+            --yellow-mid: #A89200;
+            --yellow-pale: #D4C560;
+            --yellow-light: #F5EFD0;
+            --yellow-ghost: #FAF7E8;
+
+            --green-deep: #1B4332;
+            --green-mid: #52796F;
+            --green-pale: #95D5B2;
+            --green-light: #D8F3DC;
+            --green-ghost: #EDF6EE;
+
+            --amber: #C4A35A;
+            --amber-soft: #A08840;
+
+            --serif: 'Cormorant Garamond', 'Georgia', serif;
+            --sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+
+            --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+            --ease-spring: cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        *, *::before, *::after {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            background: var(--bg);
+            color: var(--ink);
+            font-family: var(--serif);
+            font-size: 20px;
+            line-height: 1.75;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .hidden { display: none !important; }
+
+        /* ═══════════════════════════════════════
+           ZERO-UI READING CANVAS
+           ═══════════════════════════════════════ */
+
+        #reading-surface {
+            position: relative;
+            min-height: 100vh;
+            touch-action: pan-y;
+            /* OS Overrides for Long Press */
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+            /* Rubber-band Snap Back */
+            transition: transform 0.4s var(--ease-spring);
+        }
+
+        /* Disables transition so the container tracks finger instantly */
+        #reading-surface.pulling {
+            transition: none;
+        }
+
+        #aru-container {
+            padding: 15vh 32px 20vh 32px;
+            max-width: 620px;
+            margin: 0 auto;
+        }
+
+        /* ═══════════════════════════════════════
+           IN-PAGE CONTEXT BLOCKS
+           ═══════════════════════════════════════ */
+
+        .in-page-context {
+            margin-bottom: 48px;
+            padding-bottom: 32px;
+            border-bottom: 1px solid var(--rule);
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+            animation: fadeInDown 0.6s var(--ease-out-expo) forwards;
+        }
+
+        @keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .context-section h2 {
+            font-family: var(--sans); font-size: 10px; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 3px; color: var(--ink-ghost); border-bottom: 1px solid var(--rule);
+            padding-bottom: 12px; margin-bottom: 20px;
+        }
+
+        .context-prose { font-family: var(--serif); font-size: 18px; line-height: 1.8; color: var(--ink-soft); }
+
+        .entity-list { list-style: none; padding: 0; margin: 20px 0 0 0; }
+        .entity-list li {
+            padding: 14px 0; border-bottom: 1px solid var(--rule); font-family: var(--sans);
+            font-size: 13px; line-height: 1.6; color: var(--ink-soft);
+        }
+        .entity-name { font-weight: 600; color: var(--ink); font-size: 14px; }
+        .entity-tag {
+            font-size: 9px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase;
+            padding: 2px 8px; border-radius: 3px; margin-left: 8px; vertical-align: middle;
+        }
+        .entity-tag.history { background: var(--blue-light); color: var(--blue-deep); }
+        .entity-tag.new { background: var(--green-light); color: var(--green-deep); }
+
+
+        /* ═══════════════════════════════════════
+           PROSE & ATU STYLING
+           ═══════════════════════════════════════ */
+
+        .atu {
+            margin-bottom: 0;
+            text-indent: 0;
+            padding: 0.4em 0;
+            position: relative;
+            transition: filter 0.4s var(--ease-out-expo), opacity 0.4s var(--ease-out-expo);
+        }
+
+        .atu + .atu { text-indent: 1.8em; }
+        .atu.is-header { text-indent: 0; font-weight: 500; font-size: 0.95em; color: var(--ink-soft); }
+        .atu.is-signature { text-indent: 0; margin-top: 1.5em; }
+
+        .sentence {
+            cursor: pointer;
+            border-radius: 2px;
+            transition: background-color 0.25s ease;
+            padding: 1px 0;
+        }
+
+        .sentence.highlighted { background-color: var(--highlight); }
+
+        .atu.pressing {
+            background: radial-gradient(ellipse at var(--press-x, 50%) var(--press-y, 50%), rgba(0,0,0,0.03) 0%, transparent 70%);
+        }
+
+        /* ═══════════════════════════════════════
+           PULL INDICATORS
+           ═══════════════════════════════════════ */
+
+        .pull-indicator {
+            position: fixed;
+            left: 0;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            z-index: 40;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            font-family: var(--sans);
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--ink-ghost);
+        }
+
+        .pull-indicator.top { top: 0; height: 60px; transform: translateY(-100%); }
+        .pull-indicator.bottom { bottom: 0; height: 60px; transform: translateY(100%); }
+
+        .pull-indicator.visible { opacity: 1; transform: translateY(0); }
+        .pull-indicator.ready { color: var(--ink-soft); }
+
+        /* ═══════════════════════════════════════
+           FULLSCREEN SIDECAR — 60 / 40
+           ═══════════════════════════════════════ */
+
+        #sidecar-overlay {
+            position: fixed;
+            top: 0;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100%;
+            max-width: 620px;
+            z-index: 200;
+            background: var(--bg);
+            display: none;
+            flex-direction: column;
+            opacity: 0;
+            transition: opacity 0.35s var(--ease-out-expo);
+        }
+
+        #sidecar-overlay.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        #sidecar-source {
+            height: 60%;
+            overflow-y: auto;
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--rule);
+            position: relative;
+            scroll-behavior: smooth;
+        }
+
+        #sidecar-source-label {
+            font-family: var(--sans);
+            font-size: 9px;
+            font-weight: 600;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--ink-ghost);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        #sidecar-close {
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: 1.5px;
+            cursor: pointer;
+            padding: 4px 0;
+            transition: color 0.2s ease;
+        }
+
+        #sidecar-text {
+            font-family: var(--serif);
+            font-size: 18px;
+            line-height: 1.8;
+            color: var(--ink);
+        }
+
+        .source-legend {
+            display: flex;
+            gap: 14px;
+            margin-top: 14px;
+            padding-top: 10px;
+            border-top: 1px solid var(--rule);
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-family: var(--sans);
+            font-size: 9px;
+            font-weight: 500;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+            color: var(--ink-ghost);
+        }
+
+        .legend-dot { width: 8px; height: 8px; border-radius: 2px; }
+        .legend-dot.entity { background: var(--blue-mid); }
+        .legend-dot.word { background: var(--yellow-mid); }
+        .legend-dot.idiom { background: var(--green-mid); }
+
+        .cw {
+            cursor: pointer;
+            border-radius: 3px;
+            padding: 0 3px;
+            margin: 0 -1px;
+            transition: all 0.2s ease;
+            text-decoration-style: dotted;
+            text-decoration-thickness: 1.5px;
+            text-underline-offset: 3px;
+        }
+
+        .cw:active { filter: brightness(0.88); }
+
+        .cw.selected {
+            filter: brightness(0.85);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+            transform: scale(1.02);
+        }
+
+        .cw.t-entity.d-lore        { background: rgba(30,58,95,0.18); color: var(--blue-deep); text-decoration-color: var(--blue-deep); }
+        .cw.t-entity.d-contextual   { background: rgba(74,127,181,0.15); color: var(--blue-mid); text-decoration-color: var(--blue-mid); }
+        .cw.t-entity.d-universal    { background: rgba(214,232,247,0.5); color: var(--blue-deep); text-decoration-color: var(--blue-pale); }
+
+        .cw.t-word.d-lore           { background: rgba(92,78,0,0.15); color: var(--yellow-deep); text-decoration-color: var(--yellow-deep); }
+        .cw.t-word.d-contextual     { background: rgba(168,146,0,0.12); color: var(--yellow-mid); text-decoration-color: var(--yellow-mid); }
+        .cw.t-word.d-universal      { background: rgba(245,239,208,0.6); color: var(--yellow-deep); text-decoration-color: var(--yellow-pale); }
+
+        .cw.t-idiom.d-lore          { background: rgba(27,67,50,0.15); color: var(--green-deep); text-decoration-color: var(--green-deep); }
+        .cw.t-idiom.d-contextual    { background: rgba(82,121,111,0.12); color: var(--green-mid); text-decoration-color: var(--green-mid); }
+        .cw.t-idiom.d-universal     { background: rgba(216,243,220,0.6); color: var(--green-deep); text-decoration-color: var(--green-pale); }
+
+        #sidecar-tabs-area {
+            height: 40%;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .tab-panels-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .tab-bar {
+            display: flex;
+            flex-shrink: 0;
+            border-bottom: 1px solid var(--rule);
+            background: #FAFAF8;
+        }
+
+        .tab-btn {
+            flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 12px 8px;
+            cursor: pointer; font-family: var(--sans); font-size: 11px; font-weight: 500; letter-spacing: 1px;
+            text-transform: uppercase; color: var(--ink-ghost); border-bottom: 2px solid transparent;
+            transition: color 0.25s ease, border-color 0.25s ease; position: relative;
+        }
+
+        .tab-btn.active { color: var(--ink); border-bottom-color: var(--ink); }
+
+        .tab-btn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+        .tab-btn .fade-ring {
+            position: absolute; top: 6px; right: 12px; width: 6px; height: 6px; border-radius: 50%;
+            background: var(--amber); opacity: 0; transition: opacity 0.3s ease;
+        }
+
+        .tab-btn .fade-ring.pulsing { opacity: 1; animation: subtlePulse 1.2s ease infinite; }
+
+        @keyframes subtlePulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+        @keyframes fadeTab { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+        .tab-panel {
+            position: absolute; inset: 0; overflow-y: auto; padding: 16px 24px;
+            opacity: 0; pointer-events: none; transition: opacity 0.6s ease;
+        }
+
+        .tab-panel.active { opacity: 1; pointer-events: all; }
+
+        .ref-note {
+            display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
+            padding: 8px 0; border-bottom: 1px solid var(--rule); font-family: var(--serif);
+            font-size: 14px; line-height: 1.5; color: var(--ink-soft); font-style: italic;
+        }
+
+        .ref-note-text { flex: 1; }
+        .ref-note-actions { flex-shrink: 0; display: flex; gap: 4px; }
+        .ref-note-actions span {
+            font-family: var(--sans); font-size: 10px; color: var(--ink-ghost); cursor: pointer;
+            padding: 2px 6px; border-radius: 3px; transition: color 0.2s ease, background 0.2s ease;
+        }
+
+        .ref-input-row { display: flex; gap: 8px; align-items: flex-end; margin-top: 8px; }
+
+        .ref-textarea {
+            flex: 1; background: rgba(0, 0, 0, 0.03); border: 1px solid var(--rule); border-radius: 8px;
+            padding: 10px 14px; font-family: var(--serif); font-size: 15px; line-height: 1.5; color: var(--ink);
+            resize: none; outline: none; min-height: 40px; max-height: 80px; transition: border-color 0.2s ease;
+        }
+
+        .ref-save-btn {
+            background: var(--ink); border: none; color: var(--bg); font-family: var(--sans);
+            font-size: 11px; font-weight: 600; letter-spacing: 0.5px; padding: 10px 16px;
+            border-radius: 8px; cursor: pointer; transition: opacity 0.15s ease, transform 0.15s ease; white-space: nowrap;
+        }
+
+        .def-empty { font-family: var(--serif); font-size: 15px; font-style: italic; color: var(--ink-ghost); line-height: 1.7; padding: 8px 0; }
+        .def-content { animation: fadeTab 0.3s ease forwards; }
+        .def-word { font-family: var(--sans); font-weight: 600; font-size: 17px; color: var(--ink); margin-bottom: 4px; }
+        .def-type-badge {
+            display: inline-block; font-family: var(--sans); font-size: 9px; font-weight: 600;
+            letter-spacing: 1.5px; text-transform: uppercase; padding: 3px 10px; border-radius: 4px; margin-bottom: 10px;
+        }
+        .def-meaning { font-family: var(--serif); font-size: 16px; line-height: 1.7; color: var(--ink-soft); }
+
+        .def-fade-bar {
+            position: absolute; bottom: 0; left: 0; height: 2px; background: var(--ink-ghost);
+            width: 100%; transform-origin: right; transform: scaleX(1); opacity: 0; transition: opacity 0.4s ease;
+        }
+
+        .def-fade-bar.counting { opacity: 0.5; transform: scaleX(0); transition: opacity 0.4s ease, transform 5s linear; }
+
+        .intuition-placeholder { font-family: var(--serif); font-size: 15px; font-style: italic; color: var(--ink-ghost); line-height: 1.7; padding: 8px 0; }
+        .intuition-content { animation: fadeTab 0.4s ease forwards; }
+        .intuition-label { font-family: var(--sans); font-size: 9px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: var(--amber-soft); margin-bottom: 10px; }
+        .intuition-text { font-family: var(--serif); font-size: 16px; line-height: 1.75; color: var(--ink); }
+
+        /* ═══════════════════════════════════════
+           FULL-PAGE REFLECTION PAGE
+           ═══════════════════════════════════════ */
+
+        #reflection-page {
+            position: fixed; inset: 0; background: var(--bg); overflow-y: auto; z-index: 50; touch-action: pan-y;
+        }
+
+        .rp-container { max-width: 620px; margin: 0 auto; padding: 48px 28px 30vh 28px; }
+        .rp-title { font-family: var(--serif); font-size: 28px; font-weight: 500; color: var(--ink); margin: 0 0 4px 0; }
+        .rp-subtitle { font-family: var(--sans); font-size: 10px; font-weight: 500; letter-spacing: 2px; text-transform: uppercase; color: var(--ink-ghost); margin-bottom: 32px; }
+
+        .rp-aru-card { margin-bottom: 16px; padding: 16px 20px; background: rgba(180,160,120,0.06); border-radius: 8px; border-left: 4px solid var(--amber); }
+        .rp-aru-card-label { font-family: var(--sans); font-size: 9px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--amber-soft); margin-bottom: 6px; }
+        .rp-aru-card-note { font-family: var(--serif); font-size: 16px; line-height: 1.6; color: var(--ink); }
+        .rp-aru-card-actions { display: flex; gap: 8px; margin-top: 8px; }
+        .rp-aru-card-actions span { font-family: var(--sans); font-size: 11px; color: var(--ink-ghost); cursor: pointer; transition: color 0.2s ease; }
+
+        .rp-aru-input-row { display: flex; gap: 8px; align-items: flex-end; margin-top: 12px; margin-bottom: 24px; }
+        .rp-divider { height: 1px; background: var(--rule); margin: 24px 0; }
+
+        .rp-atu-group { margin-bottom: 16px; padding: 14px 16px; background: rgba(0,0,0,0.02); border-radius: 8px; border-left: 3px solid var(--rule); transition: background 0.2s ease, border-color 0.2s ease; }
+        .rp-atu-group.expanded { border-left-color: var(--ink-soft); background: rgba(0,0,0,0.04); }
+        .rp-atu-header { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+        .rp-atu-snippet { flex: 1; font-family: var(--serif); font-size: 12px; line-height: 1.4; color: var(--ink-ghost); font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .rp-atu-count { font-family: var(--sans); font-size: 9px; font-weight: 600; background: var(--rule); color: var(--ink-soft); padding: 2px 7px; border-radius: 10px; flex-shrink: 0; }
+        .rp-atu-chevron { font-family: var(--sans); font-size: 12px; color: var(--ink-ghost); transition: transform 0.2s ease; flex-shrink: 0; }
+        .rp-atu-group.expanded .rp-atu-chevron { transform: rotate(90deg); }
+        .rp-atu-body { display: none; margin-top: 12px; }
+        .rp-atu-group.expanded .rp-atu-body { display: block; }
+        .rp-atu-full-text { font-family: var(--serif); font-size: 14px; line-height: 1.6; color: var(--ink-ghost); margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--rule); }
+        .rp-atu-note { font-family: var(--serif); font-size: 15px; line-height: 1.55; color: var(--ink-soft); padding: 6px 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+        .rp-atu-note + .rp-atu-note { border-top: 1px solid var(--rule); margin-top: 4px; padding-top: 8px; }
+        .rp-atu-note-text { flex: 1; }
+        .rp-atu-note-actions { flex-shrink: 0; display: flex; gap: 4px; }
+        .rp-atu-note-actions span { font-family: var(--sans); font-size: 10px; color: var(--ink-ghost); cursor: pointer; padding: 2px 4px; border-radius: 3px; }
+        .rp-empty { font-family: var(--serif); font-size: 16px; color: var(--ink-ghost); font-style: italic; padding: 20px 0; }
+        .rp-edit-row { display: flex; gap: 8px; align-items: flex-end; margin-top: 4px; }
+
+        /* ═══════════════════════════════════════
+           PROGRESS DOTS
+           ═══════════════════════════════════════ */
+
+        #progress-bar {
+            position: fixed; right: 8px; top: 50%; transform: translateY(-50%);
+            display: flex; flex-direction: column; gap: 3px; opacity: 0;
+            transition: opacity 0.6s ease; z-index: 30; pointer-events: none;
+        }
+        #progress-bar.visible { opacity: 1; }
+        .progress-dot { width: 3px; height: 3px; border-radius: 50%; background: var(--ink-ghost); transition: background 0.3s ease, transform 0.3s ease; }
+        .progress-dot.active { background: var(--ink-soft); transform: scale(1.5); }
+
+        ::-webkit-scrollbar { width: 0; background: transparent; }
+        ::selection { background: rgba(180, 160, 120, 0.3); }
+    </style>
+
+    <style id="dynamic-theme">
+        :root {
+            --bg-light: #F8F8F0;
+            --ink-light: #334455;
+            --bg-dark: #1A2B3C;
+            --ink-dark: #E0E0D0;
+            --bg: var(--bg-light);
+            --ink: var(--ink-light);
+            --serif: 'Garamond', 'Georgia', serif;
+            --sans: 'Inter', -apple-system, sans-serif;
+            --custom-line-height: 1.6;
+        }
+        body {
+            background: var(--bg);
+            color: var(--ink);
+            font-family: var(--serif);
+            line-height: var(--custom-line-height);
+            transition: background 0.3s ease, color 0.3s ease;
+        }
+        body.dark-mode {
+            --bg: var(--bg-dark);
+            --ink: var(--ink-dark);
+            --ink-soft: #A8A29E;
+            --ink-ghost: #57534E;
+            --rule: rgba(255, 255, 255, 0.1);
+        }
+        #theme-toggle-btn {
+            position: fixed;
+            top: 15px;
+            right: 15px;
+            z-index: 9999;
+            background: var(--ink);
+            color: var(--bg);
+            font-family: var(--sans);
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            padding: 8px 14px;
+            border-radius: 20px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            user-select: none;
+        }
+    </style>
+    
+    <script>
+    function toggleDarkMode() {
+        document.body.classList.toggle('dark-mode');
+        const btn = document.getElementById('theme-toggle-btn');
+        if(document.body.classList.contains('dark-mode')) {
+            btn.textContent = 'Light Mode';
+        } else {
+            btn.textContent = 'Dark Mode';
+        }
+    }
+    </script>
+    </head>
+    
+
+<body>
+<div id="theme-toggle-btn" onclick="toggleDarkMode()">Dark Mode</div>
+
+
+    <div class="pull-indicator top" id="pull-indicator-top"><span id="pull-top-text">Pull for context</span></div>
+    <div class="pull-indicator bottom" id="pull-indicator-bottom"><span id="pull-bottom-text">Pull to reflect</span></div>
+    <div id="progress-bar"></div>
+
+    <div id="reading-surface">
+        <div id="aru-container">
+
+            <div id="in-page-context-global" class="in-page-context hidden">
+                <div class="context-section">
+                    <h2>The Story So Far</h2>
+                    <div id="context-global-paragraphs"></div>
+                </div>
+            </div>
+
+            <div id="in-page-context-local" class="in-page-context hidden">
+                <div class="context-section">
+                    <h2>Session Context</h2>
+                    <p class="context-prose" id="context-local-summary"></p>
+                    <h2 style="margin-top:36px">Entities Encountered</h2>
+                    <ul class="entity-list" id="context-local-entities"></ul>
+                </div>
+            </div>
+
+<p class="atu is-header" data-opus-lineage="D10.H8" data-opus-type="CH" data-wc="8">CHAPTER III.
+ A Caucus-Race and a Long Tale</p>
+<p class="atu" data-opus-lineage="D10.P57" data-opus-type="BP" data-wc="31"><span class="sentence">They were indeed a queer-looking party that assembled on the bank—the birds with draggled feathers, the animals with their fur clinging close to them, and all dripping wet, cross, and uncomfortable.</span> </p>
+<p class="atu" data-opus-lineage="D10.P58" data-opus-type="BP" data-wc="101"><span class="sentence">The first question of course was, how to get dry again: they had a consultation about this, and after a few minutes it seemed quite natural to Alice to find herself talking familiarly with them, as if she had known them all her life.</span> <span class="sentence">Indeed, she had quite a long argument with the Lory, who at last turned sulky, and would only say, “I am older than you, and must know better;” and this Alice would not allow without knowing how old it was, and, as the Lory positively refused to tell its age, there was no more to be said.</span> </p>
+<p class="atu" data-opus-lineage="D10.P59" data-opus-type="BP" data-wc="73"><span class="sentence">At last the Mouse, who seemed to be a person of authority among them, called out, “Sit down, all of you, and listen to me!</span> <span class="sentence">I’ll soon make you dry enough!</span> <span class="sentence">” They all sat down at once, in a large ring, with the Mouse in the middle.</span> <span class="sentence">Alice kept her eyes anxiously fixed on it, for she felt sure she would catch a bad cold if she did not get dry very soon.</span> </p>
+<p class="atu" data-opus-lineage="D10.P60" data-opus-type="DL" data-wc="65"><span class="sentence">“Ahem!</span> <span class="sentence">” said the Mouse with an important air, “are you all ready?</span> <span class="sentence">This is the driest thing I know.</span> <span class="sentence">Silence all round, if you please!</span> <span class="sentence">‘William the Conqueror, whose cause was favoured by the pope, was soon submitted to by the English, who wanted leaders, and had been of late much accustomed to usurpation and conquest.</span> <span class="sentence">Edwin and Morcar, the earls of Mercia and Northumbria—’”</span> </p>
+<p class="atu" data-opus-lineage="D10.P61" data-opus-type="DL" data-wc="7"><span class="sentence">“Ugh!</span> <span class="sentence">” said the Lory, with a shiver.</span> </p>
+<p class="atu" data-opus-lineage="D10.P62" data-opus-type="DL" data-wc="14"><span class="sentence">“I beg your pardon!</span> <span class="sentence">” said the Mouse, frowning, but very politely: “Did you speak?</span> <span class="sentence">”</span> </p>
+<p class="atu" data-opus-lineage="D10.P63" data-opus-type="BP" data-wc="6"><span class="sentence">“Not I!</span> <span class="sentence">” said the Lory hastily.</span> </p>
+<p class="atu" data-opus-lineage="D10.P64" data-opus-type="BP" data-wc="32"><span class="sentence">“I thought you did,” said the Mouse.</span> <span class="sentence">“—I proceed.</span> <span class="sentence">‘Edwin and Morcar, the earls of Mercia and Northumbria, declared for him: and even Stigand, the patriotic archbishop of Canterbury, found it advisable—’”</span> </p>
+<p class="atu" data-opus-lineage="D10.P65" data-opus-type="DL" data-wc="6"><span class="sentence">“Found what?</span> <span class="sentence">” said the Duck.</span> </p>
+<p class="atu" data-opus-lineage="D10.P66" data-opus-type="BP" data-wc="15"><span class="sentence">“Found it,” the Mouse replied rather crossly: “of course you know what ‘it’ means.</span> <span class="sentence">”</span> </p>
+<p class="atu" data-opus-lineage="D10.P67" data-opus-type="BP" data-wc="30"><span class="sentence">“I know what ‘it’ means well enough, when I find a thing,” said the Duck: “it’s generally a frog or a worm.</span> <span class="sentence">The question is, what did the archbishop find?</span> <span class="sentence">”</span> </p>
+<p class="atu" data-opus-lineage="D10.P68" data-opus-type="BP" data-wc="55"><span class="sentence">The Mouse did not notice this question, but hurriedly went on, “‘—found it advisable to go with Edgar Atheling to meet William and offer him the crown.</span> <span class="sentence">William’s conduct at first was moderate.</span> <span class="sentence">But the insolence of his Normans—’ How are you getting on now, my dear?</span> <span class="sentence">” it continued, turning to Alice as it spoke.</span> </p>
+<p class="atu" data-opus-lineage="D10.P69" data-opus-type="BP" data-wc="18"><span class="sentence">“As wet as ever,” said Alice in a melancholy tone: “it doesn’t seem to dry me at all.</span> <span class="sentence">”</span> </p>
+<p class="atu" data-opus-lineage="D10.P70" data-opus-type="BP" data-wc="25"><span class="sentence">“In that case,” said the Dodo solemnly, rising to its feet, “I move that the meeting adjourn, for the immediate adoption of more energetic remedies—”</span> </p>
+<p class="atu" data-opus-lineage="D10.P71" data-opus-type="BP" data-wc="42"><span class="sentence">“Speak English!</span> <span class="sentence">” said the Eaglet.</span> <span class="sentence">“I don’t know the meaning of half those long words, and, what’s more, I don’t believe you do either!</span> <span class="sentence">” And the Eaglet bent down its head to hide a smile: some of the other birds tittered audibly.</span> </p>
+<p class="atu" data-opus-lineage="D10.P72" data-opus-type="DL" data-wc="26"><span class="sentence">“What I was going to say,” said the Dodo in an offended tone, “was, that the best thing to get us dry would be a Caucus-race.</span> <span class="sentence">”</span> </p>
+<p class="atu" data-opus-lineage="D10.P73" data-opus-type="BP" data-wc="36"><span class="sentence">“What is a Caucus-race?</span> <span class="sentence">” said Alice; not that she wanted much to know, but the Dodo had paused as if it thought that somebody ought to speak, and no one else seemed inclined to say anything.</span> </p>
+<p class="atu" data-opus-lineage="D10.P74" data-opus-type="BP" data-wc="36"><span class="sentence">“Why,” said the Dodo, “the best way to explain it is to do it.</span> <span class="sentence">” (And, as you might like to try the thing yourself, some winter day, I will tell you how the Dodo managed it.</span> <span class="sentence">)</span> </p>
+<p class="atu" data-opus-lineage="D10.P75" data-opus-type="BP" data-wc="103"><span class="sentence">First it marked out a race-course, in a sort of circle, (“the exact shape doesn’t matter,” it said,) and then all the party were placed along the course, here and there.</span> <span class="sentence">There was no “One, two, three, and away,” but they began running when they liked, and left off when they liked, so that it was not easy to know when the race was over.</span> <span class="sentence">However, when they had been running half an hour or so, and were quite dry again, the Dodo suddenly called out “The race is over!</span> <span class="sentence">” and they all crowded round it, panting, and asking, “But who has won?</span> <span class="sentence">”</span> </p>
+<p class="atu" data-opus-lineage="D10.P76" data-opus-type="BP" data-wc="60"><span class="sentence">This question the Dodo could not answer without a great deal of thought, and it sat for a long time with one finger pressed upon its forehead (the position in which you usually see Shakespeare, in the pictures of him), while the rest waited in silence.</span> <span class="sentence">At last the Dodo said, “Everybody has won, and all must have prizes.</span> <span class="sentence">”</span> </p>
+<p class="atu" data-opus-lineage="D10.P77" data-opus-type="BP" data-wc="13"><span class="sentence">“But who is to give the prizes?</span> <span class="sentence">” quite a chorus of voices asked.</span> </p>
+<p class="atu" data-opus-lineage="D10.P78" data-opus-type="BP" data-wc="31"><span class="sentence">“Why, she, of course,” said the Dodo, pointing to Alice with one finger; and the whole party at once crowded round her, calling out in a confused way, “Prizes!</span> <span class="sentence">Prizes!</span> <span class="sentence">”</span> </p>
+<p class="atu" data-opus-lineage="D10.P79" data-opus-type="BP" data-wc="46"><span class="sentence">Alice had no idea what to do, and in despair she put her hand in her pocket, and pulled out a box of comfits, (luckily the salt water had not got into it), and handed them round as prizes.</span> <span class="sentence">There was exactly one a-piece, all round.</span> </p>
+</div>
+    </div>
+
+    <div id="sidecar-overlay">
+        <div id="sidecar-source">
+            <div id="sidecar-source-label">
+                <span>Source Paragraph</span>
+                <span id="sidecar-close" onclick="closeSidecar()">Return</span>
+            </div>
+            <div id="sidecar-text"></div>
+            <div class="source-legend">
+                <div class="legend-item"><span class="legend-dot entity"></span>Entity</div>
+                <div class="legend-item"><span class="legend-dot word"></span>Word</div>
+                <div class="legend-item"><span class="legend-dot idiom"></span>Idiom</div>
+            </div>
+        </div>
+
+        <div id="sidecar-tabs-area">
+            <div class="tab-bar">
+                <div class="tab-btn active" data-tab="reflection" onclick="switchTab('reflection')">
+                    <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                    Reflect
+                    <span class="fade-ring" id="reflect-fade-ring"></span>
+                </div>
+                <div class="tab-btn" data-tab="definition" onclick="switchTab('definition')">
+                    <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                    Define
+                </div>
+                <div class="tab-btn" data-tab="intuition" onclick="switchTab('intuition')">
+                    <svg viewBox="0 0 24 24"><line x1="9" y1="18" x2="15" y2="18"/><line x1="10" y1="22" x2="14" y2="22"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg>
+                    Intuit
+                </div>
+            </div>
+
+            <div class="tab-panels-container">
+                <div class="tab-panel active" id="panel-reflection">
+                    <div id="ref-notes-list"></div>
+                    <div class="ref-input-row">
+                        <textarea class="ref-textarea" id="ref-textarea" placeholder="What are you thinking…" rows="1"></textarea>
+                        <button class="ref-save-btn" onclick="saveReflection()">Save</button>
+                    </div>
+                </div>
+                <div class="tab-panel" id="panel-definition">
+                    <div id="def-content"><div class="def-empty">Tap a highlighted word above to see its meaning</div></div>
+                    <div class="def-fade-bar" id="def-fade-bar"></div>
+                </div>
+                <div class="tab-panel" id="panel-intuition">
+                    <div id="intuition-content"><div class="intuition-placeholder">Tap to receive a reading guide for this paragraph</div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="reflection-page" class="hidden">
+        <div class="rp-container">
+            <div class="rp-header">
+                <h1 class="rp-title">Reflections</h1>
+                <div class="rp-subtitle">Letter 2 — Archangel</div>
+            </div>
+
+            <div id="rp-aru-section"></div>
+            <div class="rp-aru-input-row">
+                <textarea class="ref-textarea" id="rp-aru-textarea" placeholder="Add a session reflection…" rows="1"></textarea>
+                <button class="ref-save-btn" onclick="saveAruReflection()">Save</button>
+            </div>
+            <div class="rp-divider"></div>
+            <div id="rp-atu-section"></div>
+        </div>
+    </div>
+
+    <script>
+    /*
+     * Octopus Reading Engine — Inline UX Implementation
+     * * This script manages the state, gestures, rubber-band physics, and UI updates for the reading experience.
+     * Order of operations:
+     * 1. Initialize DOM elements (sentence wrapping, progress dots).
+     * 2. Attach touch listeners to handle swipe, pull-to-refresh, and long-press gestures.
+     * 3. Handle data injection for the Sidecar based on knowledge items.
+     * 4. Manage Cross-tab states (Reflection, Definition, Intuition).
+     * 5. Handle inline CRUD operations for user reflections.
+     */
+
+    // #region Data and State
+    const knowledgeDb = {
+    "D10.H8": {
+        "items": [],
+        "intuition": "[Structural Boundary]"
+    },
+    "D10.P57": {
+        "items": [
+            {
+                "name": "queer-looking",
+                "column": "word",
+                "type": "Universal",
+                "depth": 0.7,
+                "desc": "Having an odd, strange, or peculiar appearance; unusual in looks.",
+                "temporal_drift": true,
+                "temporal_explanation": "In 1865, 'queer' primarily meant strange, odd, or peculiar. Its modern primary association with sexual orientation had not yet become widespread or dominant.",
+                "phrases": [
+                    "queer-looking"
+                ],
+                "context_snippet": "indeed a queer-looking party that assembled on the bank"
+            },
+            {
+                "name": "draggled",
+                "column": "word",
+                "type": "Universal",
+                "depth": 0.6,
+                "desc": "Wet, dirty, and hanging limply, typically from being dragged through mud or water.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "draggled feathers"
+                ],
+                "context_snippet": "birds with draggled feathers, the animals with their fur"
+            },
+            {
+                "name": "cross",
+                "column": "word",
+                "type": "Universal",
+                "depth": 0.7,
+                "desc": "Annoyed, ill-tempered, or peevish.",
+                "temporal_drift": true,
+                "temporal_explanation": "In 1865, 'cross' was commonly used to describe someone who was angry or irritable. While this meaning still exists, it is less common in modern English, where 'cross' more often refers to an intersection or a religious symbol.",
+                "phrases": [
+                    "cross"
+                ],
+                "context_snippet": "all dripping wet, cross, and uncomfortable."
+            }
+        ],
+        "intuition": "The description of the assembled party as 'queer-looking,' 'draggled,' 'dripping wet, cross, and uncomfortable' immediately establishes a collective mood and visual. How will this shared discomfort influence their interactions and the Mouse's promised history?"
+    },
+    "D10.P58": {
+        "items": [
+            {
+                "name": "consultation",
+                "column": "word",
+                "type": "Universal",
+                "depth": 0.6,
+                "desc": "A meeting for discussion or deliberation, typically to seek advice or make a decision. In 1865, this term was commonly used in both formal and informal contexts.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "had a consultation"
+                ],
+                "context_snippet": "they had a consultation about this, and after"
+            },
+            {
+                "name": "familiarly",
+                "column": "word",
+                "type": "Universal",
+                "depth": 0.5,
+                "desc": "In a familiar, intimate, or informal manner. It implies a lack of formality or reserve.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "talking familiarly"
+                ],
+                "context_snippet": "herself talking familiarly with them, as if"
+            },
+            {
+                "name": "known them all her life",
+                "column": "idiom",
+                "type": "Contextual",
+                "depth": 0.7,
+                "desc": "An idiom used to express a strong sense of immediate familiarity or comfort with someone, as if having been acquainted for a very long time.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "known them all her life"
+                ],
+                "context_snippet": "if she had known them all her life."
+            },
+            {
+                "name": "Lory",
+                "column": "word",
+                "type": "Universal",
+                "depth": 0.7,
+                "desc": "A type of small to medium-sized parrot, often brightly coloured, native to Australasia. In 'Alice's Adventures in Wonderland', the Lory is personified as a character capable of speech and argument.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "the Lory",
+                    "the Lory"
+                ],
+                "context_snippet": "argument with the Lory, who at last turned"
+            },
+            {
+                "name": "turned sulky",
+                "column": "idiom",
+                "type": "Contextual",
+                "depth": 0.7,
+                "desc": "To become sullen, ill-humored, or silently resentful. It describes a change in mood to one of peevishness or gloom.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "turned sulky"
+                ],
+                "context_snippet": "who at last turned sulky, and would only"
+            },
+            {
+                "name": "know better",
+                "column": "idiom",
+                "type": "Contextual",
+                "depth": 0.7,
+                "desc": "An idiom implying that one possesses superior knowledge, judgment, or experience, often due to age, which should prevent them from making mistakes or acting foolishly.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "must know better"
+                ],
+                "context_snippet": "you, and must know better;\u201d and this"
+            },
+            {
+                "name": "positively",
+                "column": "word",
+                "type": "Universal",
+                "depth": 0.6,
+                "desc": "In an emphatic, absolute, or certain manner; without doubt. It is used to strengthen a statement or refusal.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "positively refused"
+                ],
+                "context_snippet": "as the Lory positively refused to tell its"
+            },
+            {
+                "name": "no more to be said",
+                "column": "idiom",
+                "type": "Contextual",
+                "depth": 0.7,
+                "desc": "An idiom indicating that a discussion, argument, or matter has reached its conclusion, and further talk or deliberation is unnecessary or futile.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "no more to be said"
+                ],
+                "context_snippet": "its age, there was no more to be said."
+            }
+        ],
+        "intuition": "The immediate shift from physical discomfort (being wet) to a social negotiation (how to get dry, and then an argument about authority) suggests that the social dynamics and peculiar logic of this world are as pressing as its physical challenges. Alice's quick adaptation to arguing with an animal about age implies a rapid immersion into the absurd."
+    },
+    "D10.P59": {
+        "items": [
+            {
+                "name": "person of authority",
+                "column": "idiom",
+                "type": "Contextual",
+                "depth": 0.6,
+                "desc": "An individual who holds a position of power, influence, or recognized expertise, allowing them to give commands or make decisions that others are expected to follow.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "a person of authority"
+                ],
+                "context_snippet": "the Mouse, who seemed to be a person of authority among them"
+            },
+            {
+                "name": "catch a bad cold",
+                "column": "idiom",
+                "type": "Contextual",
+                "depth": 0.7,
+                "desc": "To contract a common, mild viral infection of the nose and throat, often associated with exposure to cold or damp conditions, leading to symptoms like sneezing, coughing, and a runny nose.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "catch a bad cold"
+                ],
+                "context_snippet": "she would catch a bad cold if she did not get dry very soon"
+            }
+        ],
+        "intuition": "The sudden assumption of authority by the Mouse, a creature previously characterized by its sensitivity and historical grievances, raises questions about the nature of leadership in this world. Is authority granted by circumstance, or does it stem from an inherent quality? Alice's immediate acceptance of this authority, driven by her own discomfort, suggests a pragmatic approach to survival."
+    },
+    "D10.P60": {
+        "items": [
+            {
+                "name": "Ahem!",
+                "column": "word",
+                "type": "Universal",
+                "depth": 0.5,
+                "desc": "An interjection representing the sound of clearing one's throat, often used to attract attention, express slight disapproval, or signal the beginning of a formal statement.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "Ahem!"
+                ],
+                "context_snippet": "\u201cAhem!\u201d said the Mouse with an important air"
+            },
+            {
+                "name": "important air",
+                "column": "idiom",
+                "type": "Contextual",
+                "depth": 0.7,
+                "desc": "A manner or demeanor that suggests self-importance, seriousness, or authority, often adopted to command attention or respect.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "important air"
+                ],
+                "context_snippet": "said the Mouse with an important air, \u201care you"
+            },
+            {
+                "name": "driest thing",
+                "column": "idiom",
+                "type": "Contextual",
+                "depth": 0.7,
+                "desc": "A colloquial expression referring to something extremely dull, uninteresting, or tedious, often used humorously or ironically.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "driest thing"
+                ],
+                "context_snippet": "This is the driest thing I know. Silence"
+            },
+            {
+                "name": "Silence all round",
+                "column": "idiom",
+                "type": "Contextual",
+                "depth": 0.6,
+                "desc": "A command for everyone present to become silent.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "Silence all round"
+                ],
+                "context_snippet": "I know. Silence all round, if you please!"
+            },
+            {
+                "name": "favoured by",
+                "column": "idiom",
+                "type": "Universal",
+                "depth": 0.6,
+                "desc": "To be supported, approved of, or given preference by someone or something.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "favoured by"
+                ],
+                "context_snippet": "Conqueror, whose cause was favoured by the pope, was soon"
+            },
+            {
+                "name": "submitted to",
+                "column": "idiom",
+                "type": "Universal",
+                "depth": 0.6,
+                "desc": "To yield or surrender to the authority, control, or will of another.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "submitted to"
+                ],
+                "context_snippet": "pope, was soon submitted to by the English, who"
+            },
+            {
+                "name": "of late",
+                "column": "idiom",
+                "type": "Universal",
+                "depth": 0.7,
+                "desc": "Recently; in recent times.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "of late"
+                ],
+                "context_snippet": "leaders, and had been of late much accustomed to usurpation"
+            },
+            {
+                "name": "accustomed to",
+                "column": "idiom",
+                "type": "Universal",
+                "depth": 0.6,
+                "desc": "Familiar with or used to something; in the habit of.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "accustomed to"
+                ],
+                "context_snippet": "of late much accustomed to usurpation and conquest. Edwin"
+            },
+            {
+                "name": "usurpation",
+                "column": "word",
+                "type": "Universal",
+                "depth": 0.8,
+                "desc": "The act of wrongfully seizing and holding (an office, power, or property) without legal right.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "usurpation"
+                ],
+                "context_snippet": "much accustomed to usurpation and conquest. Edwin and Morcar"
+            },
+            {
+                "name": "earls",
+                "column": "word",
+                "type": "Universal",
+                "depth": 0.7,
+                "desc": "A British nobleman ranking above a viscount and below a marquess. Historically, a high-ranking royal official or provincial ruler.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "earls"
+                ],
+                "context_snippet": "Morcar, the earls of Mercia and Northumbria\u2014\u2019\u201d"
+            },
+            {
+                "name": "the driest thing I know",
+                "column": "entity",
+                "type": "New",
+                "depth": 0.7,
+                "desc": "A historical account, specifically about William the Conqueror, recited by the Mouse. The Mouse presents this account as a literal method to 'dry' the wet creatures, implying a misunderstanding or alternative interpretation of the word 'dry' as applied to a narrative.",
+                "phrases": [
+                    "the driest thing I know",
+                    "This is the driest thing I know."
+                ],
+                "context_snippet": "\u201cAhem!\u201d said the Mouse with an important air, \u201care you all ready? This is the driest thing I know. Silence all round, if you please! \u2018William the Conqueror,"
+            }
+        ],
+        "intuition": "The Mouse's declaration of 'the driest thing I know' and its subsequent recitation of historical facts immediately raises questions about the nature of language and literal interpretation within this world. Is 'dry' meant to be understood as 'boring' or 'devoid of moisture'? How will the other creatures react to this unusual method of drying?"
+    },
+    "D10.P61": {
+        "items": [],
+        "intuition": "The Lory's visceral reaction ('Ugh!' and a shiver) to the Mouse's historical account immediately signals that the Mouse's 'drying' method is not only ineffective but actively unpleasant for the other creatures. This highlights a disconnect between the Mouse's logical, albeit peculiar, solution and the physical reality experienced by the others."
+    },
+    "D10.P62": {
+        "items": [
+            {
+                "name": "beg your pardon",
+                "column": "idiom",
+                "type": "Contextual",
+                "depth": 0.7,
+                "desc": "A polite expression used to apologize or to ask someone to repeat what they have just said because one did not hear or understand it. In 1865, this phrase was a common and formal way to express apology or request clarification, much as it is today, though perhaps with a slightly more formal tone than some modern equivalents.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "I beg your pardon!"
+                ],
+                "context_snippet": "\u201cI beg your pardon!\u201d said the Mouse"
+            }
+        ],
+        "intuition": "The Mouse's politeness, despite its frown, suggests a character attempting to maintain order and decorum even when irritated. This raises a question about the source of its irritation: was it the Lory's 'Ugh!' from the previous paragraph, or does the Mouse perceive another interruption, perhaps from Alice?"
+    },
+    "D10.P63": {
+        "items": [
+            {
+                "name": "hastily",
+                "column": "word",
+                "type": "Universal",
+                "depth": 0.6,
+                "desc": "In a hurried manner; with speed or quickness. From Middle English 'hastily', from 'hasty' (quick, rapid) and '-ly'.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "hastily"
+                ],
+                "context_snippet": "said the Lory hastily."
+            }
+        ],
+        "intuition": "The Lory's hasty denial, following its earlier audible 'Ugh!', suggests a pattern of expressing discontent but then attempting to avoid direct confrontation or responsibility for its interjections. This could indicate a character trait of passive aggression or a desire to avoid being singled out."
+    },
+    "D10.P64": {
+        "items": [
+            {
+                "name": "proceed",
+                "column": "word",
+                "type": "Universal",
+                "depth": 0.6,
+                "desc": "To continue or go forward, especially after an interruption or a pause in speech.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "I proceed"
+                ],
+                "context_snippet": "\u201c\u2014I proceed. \u2018Edwin and Morcar,"
+            },
+            {
+                "name": "earls",
+                "column": "word",
+                "type": "Universal",
+                "depth": 0.7,
+                "desc": "A British nobleman ranking above a viscount and below a marquess. The title is equivalent to a count in other European countries.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "the earls"
+                ],
+                "context_snippet": "Morcar, the earls of Mercia and"
+            },
+            {
+                "name": "declared for him",
+                "column": "idiom",
+                "type": "Contextual",
+                "depth": 0.8,
+                "desc": "To publicly state one's support or allegiance for a person or cause.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "declared for him"
+                ],
+                "context_snippet": "Northumbria, declared for him: and even"
+            },
+            {
+                "name": "patriotic",
+                "column": "word",
+                "type": "Universal",
+                "depth": 0.6,
+                "desc": "Having or expressing devotion to and vigorous support for one's country.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "the patriotic archbishop"
+                ],
+                "context_snippet": "Stigand, the patriotic archbishop of Canterbury,"
+            },
+            {
+                "name": "advisable",
+                "column": "word",
+                "type": "Universal",
+                "depth": 0.6,
+                "desc": "To be recommended; sensible or prudent.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "found it advisable"
+                ],
+                "context_snippet": "Canterbury, found it advisable\u2014\u2019\u201d"
+            },
+            {
+                "name": "Edwin and Morcar, the earls of Mercia and Northumbria",
+                "column": "entity",
+                "type": "New",
+                "depth": 0.6,
+                "desc": "Historical figures, earls of specific regions, mentioned as part of the Mouse's 'driest thing' recitation about William the Conqueror.",
+                "phrases": [
+                    "Edwin and Morcar, the earls of Mercia and Northumbria"
+                ],
+                "context_snippet": "\u201c\u2014I proceed. \u2018Edwin and Morcar, the earls of Mercia and Northumbria, declared for him"
+            },
+            {
+                "name": "Stigand, the patriotic archbishop of Canterbury",
+                "column": "entity",
+                "type": "New",
+                "depth": 0.6,
+                "desc": "A historical figure, an archbishop, mentioned as part of the Mouse's 'driest thing' recitation about William the Conqueror.",
+                "phrases": [
+                    "Stigand, the patriotic archbishop of Canterbury"
+                ],
+                "context_snippet": "and even Stigand, the patriotic archbishop of Canterbury, found it advisable\u2014"
+            }
+        ],
+        "intuition": "The Mouse's immediate return to its historical recitation, without further acknowledgment of the previous interruption, suggests a rigid adherence to its chosen method or a deliberate dismissal of dissent. The formal, historical language of the recitation stands in stark contrast to the absurd and fantastical setting, creating a peculiar juxtaposition."
+    },
+    "D10.P65": {
+        "items": [],
+        "intuition": "The Duck's question, 'Found what?', immediately follows the Mouse's declaration of 'the driest thing I know'. This suggests a literal interpretation of the Mouse's metaphorical statement, highlighting a potential disconnect in understanding among the characters."
+    },
+    "D10.P66": {
+        "items": [],
+        "intuition": "The Mouse's 'cross' reply and its need to clarify the meaning of 'it' suggest a growing impatience with its audience's lack of engagement or understanding. This interaction highlights a disconnect between the Mouse's intent (to dry them with history) and the creatures' reception, hinting at the futility of its chosen method."
+    },
+    "D10.P67": {
+        "items": [
+            {
+                "name": "archbishop",
+                "column": "word",
+                "type": "Universal",
+                "depth": 0.7,
+                "desc": "In 1865, an archbishop was a bishop of the highest rank, typically presiding over an archdiocese or province, and holding authority over other bishops in that region. In England, this would primarily refer to the Archbishops of Canterbury or York within the Church of England.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "archbishop"
+                ],
+                "context_snippet": "what did the archbishop find?"
+            }
+        ],
+        "intuition": "The Duck's literal interpretation of \"it\" as a physical object (frog or worm) versus the Mouse's metaphorical use (the historical account) underscores a fundamental disconnect in communication among the characters. Does this suggest a world where literal meaning consistently overrides figurative language, or merely a character's individual limitation?"
+    },
+    "D10.P68": {
+        "items": [
+            {
+                "name": "advisable",
+                "column": "word",
+                "type": "Universal",
+                "depth": 0.6,
+                "desc": "Proper to be advised or considered; prudent; expedient. Something that is recommended or sensible to do.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "found it advisable"
+                ],
+                "context_snippet": "found it advisable to go with Edgar"
+            },
+            {
+                "name": "Atheling",
+                "column": "word",
+                "type": "Lore",
+                "depth": 0.8,
+                "desc": "An Anglo-Saxon term for a prince of the royal family, especially one eligible for the throne. In this context, referring to Edgar \u00c6theling, the uncrowned Anglo-Saxon King of England after the Battle of Hastings.",
+                "temporal_drift": true,
+                "temporal_explanation": "The term 'Atheling' is archaic and not used in modern English outside of specific historical contexts.",
+                "phrases": [
+                    "Edgar Atheling"
+                ],
+                "context_snippet": "go with Edgar Atheling to meet William"
+            },
+            {
+                "name": "crown",
+                "column": "word",
+                "type": "Universal",
+                "depth": 0.5,
+                "desc": "The symbol of royal power; the monarchy itself. To 'offer him the crown' means to offer him the kingship.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "offer him the crown"
+                ],
+                "context_snippet": "to meet William and offer him the crown"
+            },
+            {
+                "name": "conduct",
+                "column": "word",
+                "type": "Universal",
+                "depth": 0.5,
+                "desc": "Behavior; the manner in which a person behaves, especially on a particular occasion or in a particular context.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "William\u2019s conduct"
+                ],
+                "context_snippet": "William\u2019s conduct at first was moderate"
+            },
+            {
+                "name": "moderate",
+                "column": "word",
+                "type": "Universal",
+                "depth": 0.5,
+                "desc": "Not extreme or excessive; within reasonable limits. In this context, implying William's behavior was initially restrained or reasonable.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "was moderate"
+                ],
+                "context_snippet": "conduct at first was moderate"
+            },
+            {
+                "name": "insolence",
+                "column": "word",
+                "type": "Universal",
+                "depth": 0.7,
+                "desc": "Rude and disrespectful behavior; impertinence. Often implies a contemptuous disregard for others' feelings or status.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "the insolence"
+                ],
+                "context_snippet": "But the insolence of his Normans"
+            },
+            {
+                "name": "getting on",
+                "column": "idiom",
+                "type": "Contextual",
+                "depth": 0.7,
+                "desc": "An idiom meaning to progress, fare, or manage. 'How are you getting on?' is a common inquiry about someone's well-being or progress in a task.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "How are you getting on"
+                ],
+                "context_snippet": "Normans\u2014\u2019 How are you getting on now, my dear?\u201d"
+            }
+        ],
+        "intuition": "The Mouse's behavior of ignoring a previous question from the Duck and then abruptly turning to Alice with a new question suggests a lack of consistent engagement with its audience, or perhaps a selective attention based on its own internal priorities rather than the flow of conversation."
+    },
+    "D10.P69": {
+        "items": [
+            {
+                "name": "melancholy",
+                "column": "word",
+                "type": "Universal",
+                "depth": 0.6,
+                "desc": "A pensive sadness, typically with no obvious cause; a gloomy state of mind. In the 19th century, it also carried connotations of a constitutional tendency to sadness.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "melancholy tone"
+                ],
+                "context_snippet": "said Alice in a melancholy tone"
+            }
+        ],
+        "intuition": "Alice's observation that the historical account does not physically dry her underscores the fundamental disconnect between the creatures' literal interpretations and the practical realities of their situation. It raises the question of whether any of the creatures truly understand the problem they are trying to solve, or if they are merely applying their own idiosyncratic solutions without regard for efficacy."
+    },
+    "D10.P70": {
+        "items": [
+            {
+                "name": "solemnly",
+                "column": "word",
+                "type": "Universal",
+                "depth": 0.6,
+                "desc": "In a grave, serious, and formal manner, often implying a sense of importance or ceremony.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "solemnly"
+                ],
+                "context_snippet": "said the Dodo solemnly, rising to its"
+            },
+            {
+                "name": "rising to its feet",
+                "column": "idiom",
+                "type": "Contextual",
+                "depth": 0.5,
+                "desc": "To stand up from a sitting or lying position.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "rising to its feet"
+                ],
+                "context_snippet": "solemnly, rising to its feet, \u201cI move"
+            },
+            {
+                "name": "move that",
+                "column": "word",
+                "type": "Contextual",
+                "depth": 0.7,
+                "desc": "In a formal meeting context, to propose formally for consideration or action.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "I move that"
+                ],
+                "context_snippet": "its feet, \u201cI move that the meeting"
+            },
+            {
+                "name": "adjourn",
+                "column": "word",
+                "type": "Universal",
+                "depth": 0.7,
+                "desc": "To suspend a meeting, session, or court to another time or indefinitely.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "adjourn"
+                ],
+                "context_snippet": "the meeting adjourn, for the immediate"
+            },
+            {
+                "name": "adoption",
+                "column": "word",
+                "type": "Universal",
+                "depth": 0.6,
+                "desc": "The act of formally taking up, accepting, or putting into practice something, such as a proposal or plan.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "adoption"
+                ],
+                "context_snippet": "immediate adoption of more energetic remedies"
+            },
+            {
+                "name": "energetic remedies",
+                "column": "idiom",
+                "type": "Contextual",
+                "depth": 0.7,
+                "desc": "Vigorous, active, or forceful solutions or cures to a problem or situation.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "energetic remedies"
+                ],
+                "context_snippet": "adoption of more energetic remedies\u2014\u201d"
+            }
+        ],
+        "intuition": "The Dodo's use of formal, parliamentary language ('I move that the meeting adjourn') in such an absurd situation (a group of wet animals and a girl on a riverbank) highlights the inherent disconnect between the characters' attempts at order and the chaotic reality of Wonderland. Does this formality serve to genuinely organize, or does it merely add another layer of absurdity to their predicament?"
+    },
+    "D10.P71": {
+        "items": [
+            {
+                "name": "hide a smile",
+                "column": "idiom",
+                "type": "Universal",
+                "depth": 0.5,
+                "desc": "To attempt to conceal one's amusement or pleasure, often by lowering one's head or covering one's mouth.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "hide a smile"
+                ],
+                "context_snippet": "bent down its head to hide a smile: some"
+            },
+            {
+                "name": "tittered",
+                "column": "word",
+                "type": "Universal",
+                "depth": 0.7,
+                "desc": "To laugh in a suppressed, nervous, or half-restrained way; to giggle or snicker.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "tittered"
+                ],
+                "context_snippet": "other birds tittered audibly."
+            }
+        ],
+        "intuition": "The Eaglet's direct challenge to the Mouse's vocabulary and implied sincerity, followed by its hidden smile and the tittering of other birds, suggests a breakdown in the group's cohesion and a shift towards open skepticism regarding the Mouse's leadership and methods. It raises questions about the nature of communication and understanding among the diverse group."
+    },
+    "D10.P72": {
+        "items": [
+            {
+                "name": "offended",
+                "column": "word",
+                "type": "Universal",
+                "depth": 0.6,
+                "desc": "Feeling or showing resentment or annoyance at what is perceived as an insult or slight. The meaning has remained consistent since 1865.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "offended"
+                ],
+                "context_snippet": "the Dodo in an offended tone"
+            },
+            {
+                "name": "Caucus-race",
+                "column": "word",
+                "type": "Lore",
+                "depth": 0.9,
+                "desc": "A nonsensical race invented by the Dodo in 'Alice\u2019s Adventures in Wonderland' as a means to get everyone dry. Participants run in a circle, starting and stopping when they like, and everyone is declared a winner, receiving prizes. It is often interpreted as a satire of political meetings (caucuses) which can be seen as much activity with little tangible result.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "Caucus-race"
+                ],
+                "context_snippet": "would be a Caucus-race."
+            },
+            {
+                "name": "Caucus-race",
+                "column": "entity",
+                "type": "New",
+                "depth": 0.8,
+                "desc": "A specific, as-yet-unexplained method proposed by the Dodo to dry the group after their immersion in the pool of tears.",
+                "phrases": [
+                    "Caucus-race"
+                ],
+                "context_snippet": "get us dry would be a Caucus-race."
+            }
+        ],
+        "intuition": "The Dodo's proposal of a 'Caucus-race' as a drying method introduces a new layer of absurdity. The term itself is unfamiliar in this context, suggesting that the logic of this world operates on principles distinct from conventional understanding, where a 'race' could be a solution to wetness."
+    },
+    "D10.P73": {
+        "items": [
+            {
+                "name": "Caucus-race",
+                "column": "word",
+                "type": "Lore",
+                "depth": 0.9,
+                "desc": "A term invented by Lewis Carroll for a nonsensical race in which participants run in circles and everyone wins a prize. It satirizes political caucuses of the time, which were often seen as inefficient or pointless gatherings.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "Caucus-race"
+                ],
+                "context_snippet": "\u201cWhat is a Caucus-race?\u201d said Alice; not that she"
+            },
+            {
+                "name": "inclined to say anything",
+                "column": "idiom",
+                "type": "Contextual",
+                "depth": 0.7,
+                "desc": "To be disposed or willing to speak; to feel like saying something. In this context, it means no one else felt like breaking the silence.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "inclined to say anything"
+                ],
+                "context_snippet": "speak, and no one else seemed inclined to say anything."
+            },
+            {
+                "name": "Caucus-race",
+                "column": "entity",
+                "type": "New",
+                "depth": 0.7,
+                "desc": "A specific, unusual type of race proposed by the Dodo as a method to dry the wet creatures. Its nature and rules are currently unknown to Alice and the reader.",
+                "phrases": [
+                    "Caucus-race"
+                ],
+                "context_snippet": "What is a Caucus-race?\u201d said Alice"
+            }
+        ],
+        "intuition": "This paragraph subtly explores the tension between genuine curiosity and social obligation. Alice's internal monologue reveals she asks not because she truly wants to know, but because the Dodo's pause creates a social expectation for someone to speak. What does this imply about the social norms, or lack thereof, in Wonderland, and Alice's attempts to navigate them?"
+    },
+    "D10.P74": {
+        "items": [
+            {
+                "name": "the best way to explain it is to do it",
+                "column": "idiom",
+                "type": "Contextual",
+                "depth": 0.7,
+                "desc": "A common saying emphasizing that practical demonstration or action is more effective and clearer than verbal explanation alone. It conveys the idea of 'show, don't tell'.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "the best way to explain it is to do it"
+                ],
+                "context_snippet": "said the Dodo, \u201cthe best way to explain it is to do it.\u201d"
+            }
+        ],
+        "intuition": "The Dodo's declaration that explanation comes through action highlights a pragmatic, non-verbal approach to understanding, contrasting with Alice's more conventional expectation of a verbal definition. This also introduces a meta-narrative element, where the narrator directly addresses the reader about the upcoming explanation."
+    },
+    "D10.P75": {
+        "items": [
+            {
+                "name": "race-course",
+                "column": "word",
+                "type": "Universal",
+                "depth": 0.6,
+                "desc": "A track or path specifically designed or used for races, especially for running or riding.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "race-course"
+                ],
+                "context_snippet": "marked out a race-course, in a sort of"
+            },
+            {
+                "name": "party",
+                "column": "word",
+                "type": "Universal",
+                "depth": 0.5,
+                "desc": "A company or group of persons assembled for some purpose, or engaged in some common action.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "all the party"
+                ],
+                "context_snippet": "all the party were placed along the"
+            },
+            {
+                "name": "here and there",
+                "column": "idiom",
+                "type": "Universal",
+                "depth": 0.6,
+                "desc": "In various places; scattered about; not in any particular order or concentration.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "here and there"
+                ],
+                "context_snippet": "along the course, here and there."
+            },
+            {
+                "name": "One, two, three, and away",
+                "column": "idiom",
+                "type": "Contextual",
+                "depth": 0.7,
+                "desc": "A common verbal signal or command used to initiate a race or other activity, indicating a countdown followed by the instruction to begin.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "\u201cOne, two, three, and away,\u201d"
+                ],
+                "context_snippet": "There was no \u201cOne, two, three, and away,\u201d but"
+            },
+            {
+                "name": "left off",
+                "column": "idiom",
+                "type": "Universal",
+                "depth": 0.6,
+                "desc": "To stop doing something; to cease an activity.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "left off"
+                ],
+                "context_snippet": "they liked, and left off when they liked"
+            },
+            {
+                "name": "half an hour or so",
+                "column": "idiom",
+                "type": "Universal",
+                "depth": 0.5,
+                "desc": "Approximately thirty minutes; an imprecise duration indicating around that amount of time.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "half an hour or so"
+                ],
+                "context_snippet": "running half an hour or so, and were"
+            },
+            {
+                "name": "quite dry again",
+                "column": "idiom",
+                "type": "Contextual",
+                "depth": 0.7,
+                "desc": "Fully recovered from being wet; no longer damp. This phrase refers to the characters having dried off after their previous immersion in Alice's pool of tears.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "quite dry again"
+                ],
+                "context_snippet": "so, and were quite dry again, the Dodo"
+            },
+            {
+                "name": "crowded round",
+                "column": "idiom",
+                "type": "Universal",
+                "depth": 0.6,
+                "desc": "To gather closely around someone or something, forming a crowd.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "crowded round"
+                ],
+                "context_snippet": "all crowded round it, panting, and asking"
+            },
+            {
+                "name": "panting",
+                "column": "word",
+                "type": "Universal",
+                "depth": 0.5,
+                "desc": "Breathing with short, quick breaths, typically due to exertion or excitement.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "panting"
+                ],
+                "context_snippet": "round it, panting, and asking, \u201cBut who"
+            }
+        ],
+        "intuition": "The Dodo's method of defining and concluding the race highlights a recurring theme of arbitrary authority and subjective rules within this world. How does this lack of objective structure impact the participants' understanding of success or failure?"
+    },
+    "D10.P76": {
+        "items": [
+            {
+                "name": "a great deal of thought",
+                "column": "idiom",
+                "type": "Contextual",
+                "depth": 0.6,
+                "desc": "A considerable amount of deliberation or mental effort.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "a great deal of thought"
+                ],
+                "context_snippet": "could not answer without a great deal of thought"
+            },
+            {
+                "name": "pressed upon",
+                "column": "word",
+                "type": "Universal",
+                "depth": 0.5,
+                "desc": "To apply force or weight to something, often with a specific part of the body. In this context, it means to place a finger firmly on the forehead.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "pressed upon"
+                ],
+                "context_snippet": "one finger pressed upon its forehead"
+            },
+            {
+                "name": "At last",
+                "column": "idiom",
+                "type": "Contextual",
+                "depth": 0.5,
+                "desc": "Finally; after a long delay or effort.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "At last"
+                ],
+                "context_snippet": "At last the Dodo said"
+            }
+        ],
+        "intuition": "The Dodo's declaration that 'Everybody has won, and all must have prizes' challenges the conventional understanding of competition and victory. What does this imply about the nature of rules and outcomes in Wonderland?"
+    },
+    "D10.P77": {
+        "items": [
+            {
+                "name": "chorus of voices",
+                "column": "idiom",
+                "type": "Contextual",
+                "depth": 0.6,
+                "desc": "A group of people speaking or singing simultaneously, often in agreement or unison. In this context, it implies many individuals asking the same question at once.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "a chorus of voices"
+                ],
+                "context_snippet": "quite a chorus of voices asked."
+            }
+        ],
+        "intuition": "The immediate question regarding the distribution of prizes, following the Dodo's declaration that everyone has won, highlights a recurring theme of practical problems arising from abstract or nonsensical solutions within this world."
+    },
+    "D10.P78": {
+        "items": [
+            {
+                "name": "party",
+                "column": "word",
+                "type": "Universal",
+                "depth": 0.4,
+                "desc": "In this context, 'party' refers to a group of people assembled for a common purpose or activity, rather than a social gathering for entertainment.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "the whole party"
+                ],
+                "context_snippet": "and the whole party at once crowded round her"
+            },
+            {
+                "name": "crowded round",
+                "column": "idiom",
+                "type": "Universal",
+                "depth": 0.5,
+                "desc": "To gather closely around someone or something, often in a pressing or confined manner.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "crowded round"
+                ],
+                "context_snippet": "party at once crowded round her, calling out"
+            },
+            {
+                "name": "calling out",
+                "column": "idiom",
+                "type": "Universal",
+                "depth": 0.4,
+                "desc": "To shout or exclaim, often to attract attention or make a demand.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "calling out"
+                ],
+                "context_snippet": "crowded round her, calling out in a confused way"
+            },
+            {
+                "name": "confused way",
+                "column": "idiom",
+                "type": "Universal",
+                "depth": 0.4,
+                "desc": "In a manner that is disordered, unclear, or indicative of bewilderment.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "in a confused way"
+                ],
+                "context_snippet": "calling out in a confused way, \u201cPrizes! Prizes!\u201d"
+            }
+        ],
+        "intuition": "The Dodo's declaration of Alice as the sole winner, after stating *everyone* won, presents a direct contradiction. How does this shift in logic affect the perceived fairness or purpose of the Caucus-race, and what does it imply about the Dodo's authority?"
+    },
+    "D10.P79": {
+        "items": [
+            {
+                "name": "in despair",
+                "column": "idiom",
+                "type": "Contextual",
+                "depth": 0.5,
+                "desc": "In a state of complete loss of hope or confidence; feeling utterly hopeless.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "in despair"
+                ],
+                "context_snippet": "to do, and in despair she put her hand"
+            },
+            {
+                "name": "comfits",
+                "column": "word",
+                "type": "Universal",
+                "depth": 0.7,
+                "desc": "A sweetmeat, typically a nut, seed, or piece of fruit coated with sugar.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "box of comfits",
+                    "comfits"
+                ],
+                "context_snippet": "pulled out a box of comfits, (luckily the salt"
+            },
+            {
+                "name": "handed them round",
+                "column": "idiom",
+                "type": "Contextual",
+                "depth": 0.6,
+                "desc": "Distributed them among a group of people; passed them to each person present.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "handed them round"
+                ],
+                "context_snippet": "into it), and handed them round as prizes."
+            },
+            {
+                "name": "a-piece",
+                "column": "word",
+                "type": "Universal",
+                "depth": 0.6,
+                "desc": "For each one; to each person or item individually.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "one a-piece"
+                ],
+                "context_snippet": "was exactly one a-piece, all round."
+            },
+            {
+                "name": "all round",
+                "column": "idiom",
+                "type": "Contextual",
+                "depth": 0.6,
+                "desc": "For everyone present; to all concerned or in the vicinity.",
+                "temporal_drift": false,
+                "temporal_explanation": "",
+                "phrases": [
+                    "all round"
+                ],
+                "context_snippet": "one a-piece, all round."
+            },
+            {
+                "name": "box of comfits",
+                "column": "entity",
+                "type": "New",
+                "depth": 0.6,
+                "desc": "A small container holding sweet candies, which Alice unexpectedly produces from her pocket to serve as prizes for the Caucus-race.",
+                "phrases": [
+                    "box of comfits"
+                ],
+                "context_snippet": "pulled out a box of comfits, (luckily the salt water had not got into it)"
+            }
+        ],
+        "intuition": "The immediate and perfectly portioned appearance of 'comfits' from Alice's pocket, just when needed, suggests a world where solutions to problems are often found through unexpected and convenient means. Does this act of providing for the others, even under duress, begin to establish her as a figure of utility or leadership among the creatures?"
+    }
+};
+
+    const userdata = {
+        reflections: { "__aru__": [], "D9.P22": [], "D9.P23": [], "D9.P24": [], "D9.P25": [], "D9.P26": [], "D9.P27": [], "D9.P28": [] },
+        bookmarks: []
+    };
+
+    const contextData = {
+    "global": {
+        "paragraphs": [
+            "Alice, having grown to an immense size and created a pool of tears, heard the White Rabbit returning, splendidly dressed and muttering about the Duchess. Desperate for help, Alice attempted to speak to the Rabbit, but her voice startled it, causing it to drop its gloves and fan and flee in terror. Alice picked up the dropped fan and gloves, and, fanning herself, began to question her own identity, wondering if she had been fundamentally changed by the day's events. She attempted to verify her identity by recalling basic facts, but found her knowledge confused and incorrect, leading her to fear she had been 'changed' into someone else, like Mabel. She then explicitly rejected the possibility of being Mabel, associating it with a diminished life, and set a condition for her return to the world above: that her true identity be confirmed, otherwise she would remain 'down here' until she became 'somebody else', all while expressing profound loneliness. She discovered she had inadvertently put on one of the Rabbit's gloves and was shrinking rapidly again, realizing the fan she held was the cause, and dropped it to prevent disappearing entirely. Now, having narrowly escaped disappearing, Alice found herself smaller than ever before, and her path to the garden was once again blocked by the shut door and the key on the inaccessible glass table, leading her to lament her worsened situation. Her foot then slipped, and she fell into the very pool of tears she had created, initially mistaking it for the sea before realizing its true origin. Now swimming in her own tears, Alice expresses regret for having cried so much, perceiving her current predicament as a punishment, and notes the increasing strangeness of her day. While swimming, she hears splashing and, after initially misidentifying the source due to her small size, realizes it is a mouse also caught in the pool. Alice, reasoning that everything in this 'out-of-the-way' place might be able to talk, attempts to communicate with the Mouse, formally addressing it based on a memory from her brother's Latin Grammar, but the Mouse only looks inquisitively and winks without speaking. Alice then speculates the Mouse might be French and tries to communicate in French, which causes the Mouse to react with fright, prompting Alice to apologize for mentioning cats. The Mouse then passionately responds, expressing a strong dislike for cats and questioning Alice's understanding of its perspective. Alice, attempting to soothe the Mouse, then describes her own cat, Dinah, in detail, inadvertently offending the Mouse again by mentioning Dinah's mousing abilities, and quickly apologizes once more, offering to change the subject. The Mouse, trembling, vehemently reiterates its family's deep-seated hatred for cats, demanding that the subject not be mentioned again. Alice, in a hurried attempt to change the subject, asks the Mouse about its fondness for dogs and proceeds to describe a rat-killing terrier, inadvertently offending the Mouse once more, causing it to swim away from her. Alice then calls out to the Mouse, promising to avoid discussing cats or dogs, which prompts the Mouse to turn back, visibly pale, and offer to tell its history and explain its hatred for cats and dogs once they reach the shore. The pool has become crowded with other creatures, including a Duck, a Dodo, a Lory, and an Eaglet, and Alice leads this entire party to the shore."
+        ]
+    },
+    "local": {
+        "summary": "Alice, adrift in a sea of her own tears, found an unexpected companion in a distressed Mouse. After a series of misunderstandings involving dogs and French, the two, along with other creatures, finally made it to shore. Now safe, the Mouse is poised to reveal the secrets behind its peculiar fears.",
+        "entities": [
+            {
+                "name": "Duck",
+                "tag": "history",
+                "desc": "The Duck has just appeared, having fallen into the pool of tears."
+            },
+            {
+                "name": "Eaglet",
+                "tag": "history",
+                "desc": "The Eaglet has just appeared, having fallen into the pool of tears."
+            },
+            {
+                "name": "Mouse",
+                "tag": "history",
+                "desc": "The Mouse was initially frightened by Alice's French, then offended by her descriptions of cats and dogs, leading it to swim away. It returned after Alice promised to avoid those topics, agreeing to explain its history once they reached shore. It is now part of the group swimming to shore."
+            },
+            {
+                "name": "Dodo",
+                "tag": "history",
+                "desc": "The Dodo has just appeared, having fallen into the pool of tears."
+            },
+            {
+                "name": "Alice",
+                "tag": "history",
+                "desc": "Alice has experienced rapid and involuntary changes in size, questioned her identity, and is now swimming in her own tears, lamenting her predicament. Her diminished size continues to distort her perception of common objects and creatures. She believes that creatures in this 'out-of-the-way' place might be able to speak and attempts to communicate with a Mouse, first formally, then by speculating on its origin and language, and finally by trying French. She has apologized for upsetting the Mouse by mentioning cats, but then proceeds to describe her own cat, causing further offense. She then attempts to change the subject to dogs, inadvertently offending the Mouse again and causing it to swim away. She then placated the Mouse by promising to avoid sensitive topics, leading to the Mouse's agreement to explain its history. Now, she takes the initiative to lead the group to shore."
+            },
+            {
+                "name": "Lory",
+                "tag": "history",
+                "desc": "The Lory has just appeared, having fallen into the pool of tears."
+            }
+        ]
+    }
+};
+
+    const navigation = { previousAru: "PreviousARU.html", nextAru: "NextARU.html" };
+
+    let currentAtu = null;
+    let currentAtuLineage = null;
+    let activeTab = 'reflection';
+    let currentView = 'reading'; 
+    let fadeBackTimer = null;
+    let hadReflectionText = false;
+    let expandedAtuGroups = new Set();
+    
+    // Context State Machine: 0 = None, 1 = Local, 2 = Global
+    let activeContextLevel = 0; 
+
+    // Touch physics state
+    let longPressTimer;
+    let pressStartX = 0;
+    let pressStartY = 0;
+    let touchStartTime = 0;
+    let isDragging = false;
+    let pullState = null;
+    let pullDistance = 0;
+    let wasAtTop = false;
+    let wasAtBottom = false;
+
+    const PULL_THRESHOLD = 80;
+    const SWIPE_THRESHOLD = 80;
+    const RUBBER_BAND_RESISTANCE = 0.4;
+    // #endregion
+
+    // #region Helpers
+    /*
+     * Determines the appropriate CSS class for depth mapping.
+     */
+    function depthClass(d) {
+        if (d >= 0.8) return 'd-lore';
+        if (d >= 0.5) return 'd-contextual';
+        return 'd-universal';
+    }
+
+    /*
+     * Escapes a string to be safely used within a regular expression.
+     */
+    function escapeRegex(s) { 
+        return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); 
+    }
+
+    /*
+     * Checks if the reading surface is scrolled near the absolute bottom.
+     */
+    function isNearBottom() {
+        return (window.innerHeight + window.scrollY) >= Math.max(document.body.scrollHeight, document.documentElement.scrollHeight) - 50;
+    }
+    // #endregion
+
+    // #region Initialization
+    /*
+     * Entry point to boot the application and setup event listeners.
+     */
+    function init() {
+        // wrapSentences(); Python Handled Validation.
+        buildProgressDots();
+        attachScrollListener();
+        attachReadingGestures();
+        populateInPageContext();
+        attachReflectionPageGestures();
+    }
+
+    window.onload = init;
+    // #endregion
+
+    // #region DOM Preparation
+    /*
+     * Wraps all standard prose paragraphs into segmented sentence spans.
+     */
+    function wrapSentences() {
+        document.querySelectorAll('.atu').forEach(atu => {
+            if (atu.classList.contains('is-header') || atu.classList.contains('is-signature')) return;
+            const html = atu.innerHTML;
+            const sentences = html.match(/[^.!?]+[.!?"]+[\s]*/g) || [html];
+            atu.innerHTML = sentences.map(s => `<span class="sentence">${s}</span>`).join('');
+        });
+    }
+
+    /*
+     * Builds the visual progress dot elements dynamically.
+     */
+    function buildProgressDots() {
+        const bar = document.getElementById('progress-bar');
+        document.querySelectorAll('.atu').forEach(() => {
+            const d = document.createElement('div');
+            d.className = 'progress-dot';
+            bar.appendChild(d);
+        });
+        updateProgressDots();
+    }
+
+    let progressTimer;
+    /*
+     * Calculates which ATU is currently visible and highlights the corresponding dot.
+     */
+    function updateProgressDots() {
+        const dots = document.querySelectorAll('.progress-dot');
+        const atus = document.querySelectorAll('.atu');
+        const vh = window.innerHeight;
+        atus.forEach((atu, i) => {
+            const r = atu.getBoundingClientRect();
+            dots[i].classList.toggle('active', r.top < vh * 0.7 && r.bottom > vh * 0.2);
+        });
+    }
+
+    /*
+     * Attaches an optimized scroll listener to trigger progress dot visibility.
+     */
+    function attachScrollListener() {
+        window.addEventListener('scroll', () => {
+            if (currentView !== 'reading') return;
+            document.getElementById('progress-bar').classList.add('visible');
+            updateProgressDots();
+            clearTimeout(progressTimer);
+            progressTimer = setTimeout(() => document.getElementById('progress-bar').classList.remove('visible'), 1200);
+        }, { passive: true });
+    }
+
+    /*
+     * Seeds initial knowledge datasets into the hidden DOM context elements.
+     */
+    function populateInPageContext() {
+        document.getElementById('context-local-summary').textContent = contextData.local.summary;
+        const entityList = document.getElementById('context-local-entities');
+        contextData.local.entities.forEach(ent => {
+            const li = document.createElement('li');
+            li.innerHTML = `<span class="entity-name">${ent.name}</span><span class="entity-tag ${ent.tag}">${ent.tag === 'history' ? 'History' : 'New'}</span><br>${ent.desc}`;
+            entityList.appendChild(li);
+        });
+
+        const globalDiv = document.getElementById('context-global-paragraphs');
+        contextData.global.paragraphs.forEach(p => {
+            const el = document.createElement('p');
+            el.className = 'context-prose';
+            el.textContent = p;
+            globalDiv.appendChild(el);
+        });
+    }
+    // #endregion
+
+    // #region Main Reading Gestures
+    /*
+     * Binds touch interactions for swipe, pull, and tap mechanics.
+     */
+    function attachReadingGestures() {
+        const surface = document.getElementById('reading-surface');
+        surface.addEventListener('touchstart', handleReadingTouchStart, { passive: false });
+        surface.addEventListener('touchmove', handleReadingTouchMove, { passive: false });
+        surface.addEventListener('touchend', handleReadingTouchEnd);
+        surface.addEventListener('touchcancel', resetGestureState);
+    }
+
+    /*
+     * Handles the start of a touch interaction on the reading surface.
+     * Steps:
+     * 1. Record X/Y origin and exact system timestamp.
+     * 2. Verify strict top-of-document constraint for pull logic.
+     * 3. Evaluate if target is a valid ATU to begin a 600ms long-press timer.
+     */
+    function handleReadingTouchStart(e) {
+        if (currentView !== 'reading') return;
+        isDragging = false;
+        pressStartX = e.touches[0].clientX;
+        pressStartY = e.touches[0].clientY;
+        touchStartTime = Date.now();
+        pullDistance = 0;
+        pullState = null;
+        
+        wasAtTop = window.scrollY <= 0;
+        wasAtBottom = isNearBottom();
+
+        const surface = document.getElementById('reading-surface');
+        surface.classList.remove('pulling');
+
+        const atu = e.target.closest('.atu');
+        if (atu && !atu.classList.contains('is-header') && !atu.classList.contains('is-signature')) {
+            currentAtu = atu;
+            currentAtuLineage = atu.getAttribute('data-opus-lineage');
+            const rect = atu.getBoundingClientRect();
+            atu.style.setProperty('--press-x', ((pressStartX - rect.left) / rect.width * 100) + '%');
+            atu.style.setProperty('--press-y', ((pressStartY - rect.top) / rect.height * 100) + '%');
+
+            longPressTimer = setTimeout(() => {
+                if (!isDragging && !pullState) {
+                    atu.classList.remove('pressing');
+                    openSidecar(atu);
+                }
+            }, 600);
+
+            setTimeout(() => { if (!isDragging && !pullState) atu.classList.add('pressing'); }, 100);
+        }
+    }
+
+    /*
+     * **COMPLEX FUNCTION**
+     * Handles touch movement on the reading surface, calculating rubber-band physics.
+     * Steps:
+     * 1. Calculate X/Y distance and cancel long-press if it's a drag.
+     * 2. If at strict top and context allows, calculate pull elasticity logic.
+     * 3. Apply raw CSS translateY to visually mimic document stretching.
+     * 4. Intercept the native scroll event using preventDefault().
+     * 5. Sync the UI pull indicators utilizing the scaled visual Y distance.
+     */
+    function handleReadingTouchMove(e) {
+        if (currentView !== 'reading') return;
+        const touch = e.touches[0];
+        const dy = touch.clientY - pressStartY;
+        const dx = touch.clientX - pressStartX;
+
+        if (Math.abs(dy) > 10 || Math.abs(dx) > 10) {
+            isDragging = true;
+            clearTimeout(longPressTimer);
+            document.querySelectorAll('.atu.pressing').forEach(a => a.classList.remove('pressing'));
+        }
+
+        const atTop = wasAtTop && window.scrollY <= 0;
+        const atBottom = wasAtBottom || isNearBottom();
+        const surface = document.getElementById('reading-surface');
+
+        // Top Pull (Context injection)
+        if (atTop && dy > 0 && activeContextLevel < 2) {
+            if (e.cancelable) e.preventDefault(); 
+            pullState = 'top';
+            pullDistance = dy;
+            
+            const visualY = dy * RUBBER_BAND_RESISTANCE;
+            surface.classList.add('pulling');
+            surface.style.transform = `translateY(${visualY}px)`;
+
+            const nextContext = activeContextLevel === 0 ? 'local' : 'global';
+            updatePullIndicator('pull-indicator-top', 'pull-top-text', visualY, `Release for ${nextContext} context`, `Pull for ${nextContext} context`);
+        } 
+        // Bottom Pull (Reflection Page)
+        else if (atBottom && dy < 0) {
+            if (e.cancelable) e.preventDefault(); 
+            pullState = 'bottom';
+            pullDistance = Math.abs(dy);
+            
+            const visualY = dy * RUBBER_BAND_RESISTANCE; 
+            surface.classList.add('pulling');
+            surface.style.transform = `translateY(${visualY}px)`; // Negative Y translates up
+
+            updatePullIndicator('pull-indicator-bottom', 'pull-bottom-text', pullDistance * RUBBER_BAND_RESISTANCE, 'Release to reflect', 'Pull to reflect');
+        }
+    }
+
+    /*
+     * **COMPLEX FUNCTION**
+     * Concludes the touch event on the reading surface and resolves gestures.
+     * Steps:
+     * 1. Clean up lingering visual states (timers, press classes).
+     * 2. Clear the rubber-band CSS transform to allow the native CSS transition snap-back.
+     * 3. Route gesture intent (Context injection, Navigation, Reflection page).
+     * 4. If duration was < 600ms and no drag/pull occurred, trigger sentence highlight toggle.
+     * 5. Reset all active gesture states tracking.
+     */
+    function handleReadingTouchEnd(e) {
+        if (currentView !== 'reading') return;
+        clearTimeout(longPressTimer);
+        document.querySelectorAll('.atu.pressing').forEach(a => a.classList.remove('pressing'));
+
+        const dx = e.changedTouches[0].clientX - pressStartX;
+        const dy = e.changedTouches[0].clientY - pressStartY;
+        const touchDuration = Date.now() - touchStartTime;
+
+        const surface = document.getElementById('reading-surface');
+        surface.classList.remove('pulling');
+        surface.style.transform = ''; // Initiates CSS transition snap-back
+
+        const visualTopPull = pullState === 'top' ? pullDistance * RUBBER_BAND_RESISTANCE : 0;
+        const visualBottomPull = pullState === 'bottom' ? pullDistance * RUBBER_BAND_RESISTANCE : 0;
+
+        // Resolve top pull
+        if (pullState === 'top' && visualTopPull > PULL_THRESHOLD) {
+            if (activeContextLevel === 0) {
+                document.getElementById('in-page-context-local').classList.remove('hidden');
+                activeContextLevel = 1;
+            } else if (activeContextLevel === 1) {
+                document.getElementById('in-page-context-global').classList.remove('hidden');
+                activeContextLevel = 2;
+            }
+        } 
+        // Resolve bottom pull
+        else if (pullState === 'bottom' && visualBottomPull > PULL_THRESHOLD) {
+            openReflectionPage();
+        }
+        // Resolve horizontal swipe
+        else if (Math.abs(dx) > SWIPE_THRESHOLD && Math.abs(dx) > Math.abs(dy) * 1.5 && !pullState) {
+            if (dx < 0 && navigation.nextAru) {
+                window.location.href = navigation.nextAru;
+            } else if (dx > 0 && navigation.previousAru) {
+                window.location.href = navigation.previousAru;
+            }
+        }
+        // Short tap constraint check
+        else if (!isDragging && !pullState && touchDuration < 600) {
+            const sentence = e.target.closest('.sentence');
+            if (sentence) sentence.classList.toggle('highlighted');
+        }
+
+        hidePullIndicators();
+        resetGestureState();
+    }
+
+    /*
+     * Resets the structural data for gesture evaluation.
+     */
+    function resetGestureState() {
+        pullState = null; 
+        pullDistance = 0; 
+        wasAtTop = false; 
+        wasAtBottom = false;
+    }
+
+    /*
+     * Syncs a pull indicator element with current gesture physics.
+     */
+    function updatePullIndicator(elementId, textId, distance, readyText, pullText) {
+        const ind = document.getElementById(elementId);
+        ind.classList.add('visible');
+        ind.classList.toggle('ready', distance > PULL_THRESHOLD);
+        document.getElementById(textId).textContent = distance > PULL_THRESHOLD ? readyText : pullText;
+    }
+
+    /*
+     * Forces all pull indicators to a hidden state.
+     */
+    function hidePullIndicators() {
+        document.getElementById('pull-indicator-top').classList.remove('visible', 'ready');
+        document.getElementById('pull-indicator-bottom').classList.remove('visible', 'ready');
+    }
+    // #endregion
+
+    // #region Sidecar Management
+    /*
+     * Opens the sidecar UI and initiates the markup generation for terms.
+     */
+    function openSidecar(atu) {
+        currentAtu = atu;
+        currentAtuLineage = atu.getAttribute('data-opus-lineage');
+        const data = knowledgeDb[currentAtuLineage];
+
+        const html = buildSidecarSourceHtml(atu.textContent, data);
+        document.getElementById('sidecar-text').innerHTML = html;
+
+        switchTab('reflection');
+        renderReflections();
+        resetDefinition();
+        resetIntuition();
+
+        const overlay = document.getElementById('sidecar-overlay');
+        overlay.style.display = 'flex';
+        requestAnimationFrame(() => { overlay.classList.add('active'); });
+
+        const ta = document.getElementById('ref-textarea');
+        ta.value = '';
+        ta.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 80) + 'px';
+        });
+    }
+
+    /*
+     * Computes the final HTML string containing interactive knowledge items.
+     */
+    function buildSidecarSourceHtml(rawText, data) {
+        let html = rawText;
+        if (!data || data.items.length === 0) return html;
+
+        const sorted = [...data.items].sort((a, b) =>
+            Math.max(...b.phrases.map(p => p.length)) - Math.max(...a.phrases.map(p => p.length))
+        );
+
+        const placeholders = [];
+        sorted.forEach((item, idx) => {
+            item.phrases.forEach(phrase => {
+                const regex = new RegExp(`\\b(${escapeRegex(phrase)})\\b`, 'gi');
+                html = html.replace(regex, match => {
+                    const ph = `__PH${placeholders.length}__`;
+                    const tc = item.column === 'entity' ? 't-entity' : item.column === 'word' ? 't-word' : 't-idiom';
+                    const dc = depthClass(item.depth);
+                    placeholders.push(`<span class="cw ${tc} ${dc}" data-idx="${idx}" onclick="onWordTap(this, ${idx})">${match}</span>`);
+                    return ph;
+                });
+            });
+        });
+
+        placeholders.forEach((r, i) => { 
+            html = html.replaceAll(`__PH${i}__`, r); 
+        });
+
+        return html;
+    }
+
+    /*
+     * Triggers sidecar tear down sequence.
+     */
+    function closeSidecar() {
+        clearFadeBack();
+        const overlay = document.getElementById('sidecar-overlay');
+        overlay.classList.remove('active');
+        setTimeout(() => { overlay.style.display = 'none'; }, 350);
+    }
+    // #endregion
+
+    // #region Tab Management
+    /*
+     * Orchestrates visual swapping between sidecar tool tabs.
+     */
+    function switchTab(tab) {
+        activeTab = tab;
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === `panel-${tab}`));
+
+        if (tab === 'intuition') generateIntuition();
+        clearFadeBack();
+    }
+
+    /*
+     * Handles tap interactions on knowledge terms within the sidecar.
+     */
+    function onWordTap(el, idx) {
+        if (!currentAtuLineage) return;
+        const data = knowledgeDb[currentAtuLineage];
+        if (!data) return;
+
+        const sorted = [...data.items].sort((a, b) =>
+            Math.max(...b.phrases.map(p => p.length)) - Math.max(...a.phrases.map(p => p.length))
+        );
+        const item = sorted[idx];
+        if (!item) return;
+
+        document.querySelectorAll('#sidecar-text .cw.selected').forEach(w => w.classList.remove('selected'));
+        el.classList.add('selected');
+
+        const refTextarea = document.getElementById('ref-textarea');
+        hadReflectionText = refTextarea && refTextarea.value.trim().length > 0;
+
+        const colorMap = {
+            entity: { bg: 'var(--blue-light)', color: 'var(--blue-deep)' },
+            word: { bg: 'var(--yellow-light)', color: 'var(--yellow-deep)' },
+            idiom: { bg: 'var(--green-light)', color: 'var(--green-deep)' }
+        };
+        const c = colorMap[item.column] || colorMap.word;
+
+        document.getElementById('def-content').innerHTML = `
+            <div class="def-content">
+                <div class="def-word">${item.name}</div>
+                <div class="def-type-badge" style="background:${c.bg}; color:${c.color}">${item.type} · ${item.column}</div>
+                <div class="def-meaning">${item.desc}</div>
+            </div>`;
+
+        switchTab('definition');
+        if (hadReflectionText) startFadeBack();
+    }
+
+    /*
+     * Initializes the UX timer routing users back to the reflection tab.
+     */
+    function startFadeBack() {
+        clearFadeBack();
+        document.getElementById('reflect-fade-ring').classList.add('pulsing');
+
+        const bar = document.getElementById('def-fade-bar');
+        bar.classList.remove('counting');
+        bar.offsetHeight; 
+        bar.classList.add('counting');
+
+        fadeBackTimer = setTimeout(() => {
+            clearFadeBack();
+            switchTab('reflection');
+            setTimeout(() => {
+                const ta = document.getElementById('ref-textarea');
+                if (ta) ta.focus();
+            }, 700);
+        }, 5000);
+
+        const panel = document.getElementById('panel-definition');
+        panel.addEventListener('pointerdown', killFadeBack, { once: true });
+    }
+
+    /*
+     * Kills the active fade-back timer manually via user interrupt.
+     */
+    function killFadeBack() {
+        clearFadeBack();
+    }
+
+    /*
+     * Resets structural attributes related to the fade-back mechanic.
+     */
+    function clearFadeBack() {
+        if (fadeBackTimer) { clearTimeout(fadeBackTimer); fadeBackTimer = null; }
+        document.getElementById('reflect-fade-ring').classList.remove('pulsing');
+        const bar = document.getElementById('def-fade-bar');
+        bar.classList.remove('counting');
+        const panel = document.getElementById('panel-definition');
+        panel.removeEventListener('pointerdown', killFadeBack);
+    }
+
+    /*
+     * Resets visual structure for the Definition panel empty state.
+     */
+    function resetDefinition() {
+        document.getElementById('def-content').innerHTML = '<div class="def-empty">Tap a highlighted word above to see its meaning</div>';
+        clearFadeBack();
+    }
+
+    /*
+     * Populates the Intuition tab utilizing predefined reading guides.
+     */
+    function generateIntuition() {
+        if (!currentAtuLineage) return;
+        const data = knowledgeDb[currentAtuLineage];
+        const container = document.getElementById('intuition-content');
+        
+        if (!data || !data.intuition) {
+            container.innerHTML = '<div class="intuition-placeholder">No reading guide available for this paragraph.</div>';
+            return;
+        }
+
+        container.innerHTML = `
+            <div class="intuition-content">
+                <div class="intuition-label">Reading Guide</div>
+                <div class="intuition-text">${data.intuition}</div>
+            </div>`;
+    }
+
+    /*
+     * Resets visual structure for the Intuition panel empty state.
+     */
+    function resetIntuition() {
+        document.getElementById('intuition-content').innerHTML =
+            '<div class="intuition-placeholder">Tap to receive a reading guide for this paragraph</div>';
+    }
+    // #endregion
+
+    // #region Sidecar Reflections
+    /*
+     * Builds and appends existing notes into the sidecar reflection UI.
+     */
+    function renderReflections() {
+        const list = document.getElementById('ref-notes-list');
+        if (!list || !currentAtuLineage) return;
+
+        const notes = userdata.reflections[currentAtuLineage] || [];
+        list.innerHTML = '';
+        notes.forEach((note, i) => {
+            const div = document.createElement('div');
+            div.className = 'ref-note';
+            div.innerHTML = `
+                <span class="ref-note-text">\u201C${note}\u201D</span>
+                <div class="ref-note-actions">
+                    <span onclick="deleteReflection(${i})">\u00D7</span>
+                </div>`;
+            list.appendChild(div);
+        });
+    }
+
+    /*
+     * Appends a new sidecar reflection to the dataset and initiates a re-render.
+     */
+    function saveReflection() {
+        const ta = document.getElementById('ref-textarea');
+        if (!ta || !currentAtuLineage) return;
+        const val = ta.value.trim();
+        if (!val) return;
+
+        if (!userdata.reflections[currentAtuLineage]) userdata.reflections[currentAtuLineage] = [];
+        userdata.reflections[currentAtuLineage].push(val);
+
+        ta.value = '';
+        ta.style.height = 'auto';
+        renderReflections();
+    }
+
+    /*
+     * Removes an isolated sidecar reflection from the dataset based on index.
+     */
+    function deleteReflection(idx) {
+        if (!currentAtuLineage) return;
+        if (userdata.reflections[currentAtuLineage]) {
+            userdata.reflections[currentAtuLineage].splice(idx, 1);
+            renderReflections();
+        }
+    }
+    // #endregion
+
+    // #region Reflection Page Implementation
+    /*
+     * Transforms the master viewport into the reflection context page.
+     */
+    function openReflectionPage() {
+        currentView = 'reflection';
+        document.getElementById('reading-surface').classList.add('hidden');
+        document.getElementById('progress-bar').classList.remove('visible');
+        document.getElementById('reflection-page').classList.remove('hidden');
+        populateReflectionPage();
+    }
+
+    /*
+     * Reverts master viewport back to the core reading experience.
+     */
+    function closeReflectionPage() {
+        currentView = 'reading';
+        document.getElementById('reflection-page').classList.add('hidden');
+        document.getElementById('reading-surface').classList.remove('hidden');
+    }
+
+    /*
+     * Central execution pipeline to build the reflection page structure.
+     */
+    function populateReflectionPage() {
+        renderAruReflections();
+        renderAtuReflections();
+    }
+
+    /*
+     * Builds and inserts global (ARU-level) reflections into DOM view.
+     */
+    function renderAruReflections() {
+        const aruSection = document.getElementById('rp-aru-section');
+        aruSection.innerHTML = '';
+        const aruNotes = userdata.reflections['__aru__'] || [];
+        aruNotes.forEach((note, i) => {
+            const card = document.createElement('div');
+            card.className = 'rp-aru-card';
+            card.innerHTML = `
+                <div class="rp-aru-card-label">Session Reflection</div>
+                <div class="rp-aru-card-note" id="rp-aru-note-${i}">${note}</div>
+                <div class="rp-aru-card-actions" id="rp-aru-actions-${i}">
+                    <span onclick="editAruNote(${i})">Edit</span>
+                    <span onclick="deleteAruNote(${i})">Delete</span>
+                </div>`;
+            aruSection.appendChild(card);
+        });
+    }
+
+    /*
+     * Scrapes reading layout and builds nested (ATU-level) reflections.
+     */
+    function renderAtuReflections() {
+        const atuSection = document.getElementById('rp-atu-section');
+        atuSection.innerHTML = '';
+        const atus = document.querySelectorAll('.atu');
+        let hasAtuNotes = false;
+
+        atus.forEach(atu => {
+            if (atu.classList.contains('is-header') || atu.classList.contains('is-signature')) return;
+            const lineage = atu.getAttribute('data-opus-lineage');
+            const notes = userdata.reflections[lineage];
+            if (!notes || !notes.length) return;
+
+            hasAtuNotes = true;
+            const firstSentence = (atu.textContent.match(/[^.!?]+[.!?"]+/) || [atu.textContent.substring(0, 80)])[0].trim();
+
+            const group = document.createElement('div');
+            group.className = 'rp-atu-group';
+            group.setAttribute('data-lineage', lineage);
+            
+            if (expandedAtuGroups.has(lineage)) group.classList.add('expanded');
+
+            let notesHtml = '';
+            notes.forEach((note, i) => {
+                notesHtml += `<div class="rp-atu-note" id="rp-atu-note-${lineage}-${i}">
+                    <span class="rp-atu-note-text">\u201C${note}\u201D</span>
+                    <div class="rp-atu-note-actions">
+                        <span onclick="editAtuNote('${lineage}', ${i}); event.stopPropagation();">Edit</span>
+                        <span onclick="deleteAtuNote('${lineage}', ${i}); event.stopPropagation();">Del</span>
+                    </div></div>`;
+            });
+
+            group.innerHTML = `
+                <div class="rp-atu-header" onclick="toggleAtuGroup(this.parentElement)">
+                    <span class="rp-atu-snippet">${firstSentence}</span>
+                    <span class="rp-atu-count">${notes.length}</span>
+                    <span class="rp-atu-chevron">\u203A</span>
+                </div>
+                <div class="rp-atu-body">
+                    <div class="rp-atu-full-text">${atu.textContent}</div>
+                    ${notesHtml}
+                </div>`;
+            atuSection.appendChild(group);
+        });
+
+        if (!hasAtuNotes) atuSection.innerHTML = '<div class="rp-empty">No paragraph reflections yet\u2026</div>';
+    }
+
+    /*
+     * Expands an ATU group and archives state to prevent collapse on re-render.
+     */
+    function toggleAtuGroup(group) {
+        group.classList.toggle('expanded');
+        const lineage = group.getAttribute('data-lineage');
+        if (group.classList.contains('expanded')) {
+            expandedAtuGroups.add(lineage);
+        } else {
+            expandedAtuGroups.delete(lineage);
+        }
+    }
+
+    /*
+     * Pushes new top-level ARU reflection string into data stack.
+     */
+    function saveAruReflection() {
+        const ta = document.getElementById('rp-aru-textarea');
+        const val = ta.value.trim();
+        if (!val) return;
+        userdata.reflections['__aru__'].push(val);
+        ta.value = '';
+        populateReflectionPage();
+    }
+
+    /*
+     * Triggers inline edit mode for an ARU reflection.
+     */
+    function editAruNote(idx) {
+        const noteEl = document.getElementById(`rp-aru-note-${idx}`);
+        const actionsEl = document.getElementById(`rp-aru-actions-${idx}`);
+        if (!noteEl) return;
+        const currentText = userdata.reflections['__aru__'][idx];
+        noteEl.innerHTML = `<div class="rp-edit-row">
+            <textarea class="ref-textarea" id="rp-aru-edit-ta-${idx}" rows="1">${currentText}</textarea>
+            <button class="ref-save-btn" onclick="saveAruEdit(${idx})">Save</button>
+        </div>`;
+        actionsEl.style.display = 'none';
+        document.getElementById(`rp-aru-edit-ta-${idx}`).focus();
+    }
+
+    /*
+     * Saves changes to an ARU reflection or deletes if emptied.
+     */
+    function saveAruEdit(idx) {
+        const ta = document.getElementById(`rp-aru-edit-ta-${idx}`);
+        const val = ta.value.trim();
+        if (!val) {
+            userdata.reflections['__aru__'].splice(idx, 1);
+        } else {
+            userdata.reflections['__aru__'][idx] = val;
+        }
+        populateReflectionPage();
+    }
+
+    /*
+     * Removes ARU reflection node logically and visually.
+     */
+    function deleteAruNote(idx) {
+        userdata.reflections['__aru__'].splice(idx, 1);
+        populateReflectionPage();
+    }
+
+    /*
+     * Triggers inline edit mode for an ATU reflection.
+     */
+    function editAtuNote(lineage, idx) {
+        const noteEl = document.getElementById(`rp-atu-note-${lineage}-${idx}`);
+        if (!noteEl) return;
+        const currentText = userdata.reflections[lineage][idx];
+        noteEl.innerHTML = `<div class="rp-edit-row">
+            <textarea class="ref-textarea" id="rp-atu-edit-ta-${lineage}-${idx}" rows="1">${currentText}</textarea>
+            <button class="ref-save-btn" onclick="saveAtuEdit('${lineage}', ${idx})">Save</button>
+        </div>`;
+        document.getElementById(`rp-atu-edit-ta-${lineage}-${idx}`).focus();
+    }
+
+    /*
+     * Saves changes to an ATU reflection or deletes if emptied.
+     */
+    function saveAtuEdit(lineage, idx) {
+        const ta = document.getElementById(`rp-atu-edit-ta-${lineage}-${idx}`);
+        const val = ta.value.trim();
+        if (!val) {
+            userdata.reflections[lineage].splice(idx, 1);
+        } else {
+            userdata.reflections[lineage][idx] = val;
+        }
+        populateReflectionPage();
+    }
+
+    /*
+     * Removes ATU reflection node logically and visually.
+     */
+    function deleteAtuNote(lineage, idx) {
+        userdata.reflections[lineage].splice(idx, 1);
+        populateReflectionPage();
+    }
+
+    /*
+     * Connects touch gestures applied explicitly while in the Reflection Page.
+     */
+    function attachReflectionPageGestures() {
+        const page = document.getElementById('reflection-page');
+        let startY = 0;
+        let pulling = false;
+        let pullDir = null;
+        let dist = 0;
+
+        page.addEventListener('touchstart', e => {
+            if (currentView !== 'reflection') return;
+            startY = e.touches[0].clientY;
+            pulling = false;
+            pullDir = null;
+            dist = 0;
+        }, { passive: true });
+
+        page.addEventListener('touchmove', e => {
+            if (currentView !== 'reflection') return;
+            const dy = e.touches[0].clientY - startY;
+            if (Math.abs(dy) > 15) pulling = true;
+
+            if (page.scrollTop < 5 && dy > 20) {
+                if (e.cancelable) e.preventDefault();
+                pullDir = 'top';
+                dist = dy;
+                updatePullIndicator('pull-indicator-top', 'pull-top-text', dy, 'Release to return', 'Pull to return');
+            } else if (isReflectionNearBottom() && dy < -20) {
+                if (e.cancelable) e.preventDefault();
+                pullDir = 'bottom';
+                dist = Math.abs(dy);
+                updatePullIndicator('pull-indicator-bottom', 'pull-bottom-text', dist, 'Release for next ARU', 'Pull for next ARU');
+            }
+        }, { passive: false });
+
+        page.addEventListener('touchend', () => {
+            if (pullDir === 'top' && dist > PULL_THRESHOLD) {
+                closeReflectionPage();
+            } else if (pullDir === 'bottom' && dist > PULL_THRESHOLD && navigation.nextAru) {
+                window.location.href = navigation.nextAru;
+            }
+            hidePullIndicators();
+            pulling = false; pullDir = null; dist = 0;
+        });
+    }
+    // #endregion
+</script>
+</body>
+</html>
