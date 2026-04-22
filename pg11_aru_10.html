@@ -547,7 +547,8 @@
                     <ul class="entity-list" id="context-local-entities"></ul>
                 </div>
             </div>
-
+            </div>
+            <div id="base-text-container">
 <p class="atu" data-opus-lineage="86000" data-opus-type="BP" data-wc="12"><span class="sentence">“But she must have a prize herself, you know,” said the Mouse.</span> </p>
 <p class="atu" data-opus-lineage="87000" data-opus-type="BP" data-wc="21"><span class="sentence">“Of course,” the Dodo replied very gravely.</span> <span class="sentence">“What else have you got in your pocket?</span> <span class="sentence">” he went on, turning to Alice.</span> </p>
 <p class="atu" data-opus-lineage="88000" data-opus-type="BP" data-wc="6"><span class="sentence">“Only a thimble,” said Alice sadly.</span> </p>
@@ -618,6 +619,8 @@
 <p class="atu" data-opus-lineage="110000" data-opus-type="BP" data-wc="98"><span class="sentence">“I wish I hadn’t mentioned Dinah!</span> <span class="sentence">” she said to herself in a melancholy tone.</span> <span class="sentence">“Nobody seems to like her, down here, and I’m sure she’s the best cat in the world!</span> <span class="sentence">Oh, my dear Dinah!</span> <span class="sentence">I wonder if I shall ever see you any more!</span> <span class="sentence">” And here poor Alice began to cry again, for she felt very lonely and low-spirited.</span> <span class="sentence">In a little while, however, she again heard a little pattering of footsteps in the distance, and she looked up eagerly, half hoping that the Mouse had changed his mind, and was coming back to finish his story.</span> </p>
 <p class="atu is-header" data-opus-lineage="111000" data-opus-type="CH" data-wc="9">CHAPTER IV.
  The Rabbit Sends in a Little Bill</p>
+            </div>
+
 </div>
     </div>
 
@@ -1710,6 +1713,7 @@
     let pinchStartDist = 0;
     let pinchProcessed = false;
     let isPinching = false;
+    let savedScrollY = 0;
 
     const PULL_THRESHOLD = 80;
     const SWIPE_THRESHOLD = 80;
@@ -1752,6 +1756,13 @@
         attachReadingGestures();
         populateInPageContext();
         attachReflectionPageGestures();
+        
+        const sidecar = document.getElementById('sidecar-overlay');
+        let overlayStartY = 0;
+        sidecar.addEventListener('touchstart', (e) => overlayStartY = e.touches[0].clientY, {passive: true});
+        sidecar.addEventListener('touchmove', (e) => {
+            if (e.touches[0].clientY - overlayStartY > 80) closeSidecar();
+        }, {passive: true});
     }
 
     window.onload = init;
@@ -1923,23 +1934,32 @@
             const scale = currentDist / pinchStartDist;
             
             if (!pinchProcessed) {
-                if (scale < 0.7) { // Pinch In (Zoom In)
+                if (scale < 0.7) { // Pinch Fingers Together (Zoom Out Spatial) -> Move 0 -> 1 -> 2
                     pinchProcessed = true;
-                    if (activeContextLevel === 2) {
-                        document.getElementById('in-page-context-global').classList.add('hidden');
+                    if (activeContextLevel === 0) {
+                        savedScrollY = window.scrollY;
+                        document.getElementById('base-text-container').classList.add('hidden');
+                        document.getElementById('in-page-context-local').classList.remove('hidden');
+                        window.scrollTo(0, 0);
                         activeContextLevel = 1;
                     } else if (activeContextLevel === 1) {
                         document.getElementById('in-page-context-local').classList.add('hidden');
-                        activeContextLevel = 0;
+                        document.getElementById('in-page-context-global').classList.remove('hidden');
+                        window.scrollTo(0, 0);
+                        activeContextLevel = 2;
                     }
-                } else if (scale > 1.4) { // Pinch Out (Zoom Out)
+                } else if (scale > 1.4) { // Spread Fingers Apart (Zoom In Spatial) -> Move 2 -> 1 -> 0
                     pinchProcessed = true;
-                    if (activeContextLevel === 0) {
+                    if (activeContextLevel === 2) {
+                        document.getElementById('in-page-context-global').classList.add('hidden');
                         document.getElementById('in-page-context-local').classList.remove('hidden');
+                        window.scrollTo(0, 0);
                         activeContextLevel = 1;
                     } else if (activeContextLevel === 1) {
-                        document.getElementById('in-page-context-global').classList.remove('hidden');
-                        activeContextLevel = 2;
+                        document.getElementById('in-page-context-local').classList.add('hidden');
+                        document.getElementById('base-text-container').classList.remove('hidden');
+                        window.scrollTo(0, savedScrollY);
+                        activeContextLevel = 0;
                     }
                 }
             }
